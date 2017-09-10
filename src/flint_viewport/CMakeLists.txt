@@ -15,7 +15,7 @@ add_library(flint_viewport ${SOURCES} ${HEADERS})
 set_target_properties(flint_viewport PROPERTIES LINKER_LANGUAGE CXX)
 add_dependencies(flint_viewport glfw)
 target_link_libraries(flint_viewport
-    ${GLFW3_LIBRARY}
+    glfw3
     ${OPENGL_LIBRARY}
     ${X11_LIBRARIES}
     ${X11_Xxf86vm_LIB}
@@ -27,7 +27,7 @@ target_link_libraries(flint_viewport
 
 set(INCLUDE_DEST "include/flint_viewport")
 set(LIB_DEST "lib/${CMAKE_BUILD_TYPE}")
-message(ERROR ${OPENGL_INCLUDE_DIR})
+
 target_include_directories(flint_viewport PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include>

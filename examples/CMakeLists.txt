@@ -1,10 +1,11 @@
 
 file(GLOB EXAMPLES *.cc)
 
-find_package(Threads)
+find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
 
 foreach(EXAMPLE ${EXAMPLES})
     get_filename_component(NAME ${EXAMPLE} NAME_WE)
     add_executable(${NAME} ${EXAMPLE})
-    target_link_libraries(${NAME} flint flint_viewport ${CMAKE_THREAD_LIBS_INIT})
+    target_link_libraries(${NAME} png16 flint flint_viewport ${CMAKE_THREAD_LIBS_INIT} ${ZLIB_LIBRARIES})
 endforeach()
