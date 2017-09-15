@@ -145,9 +145,15 @@ void Loop(display::Viewport::Window* window) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "Expected one argument" << std::endl;
+    if (argc < 2) {
+        std::cerr << "Expected at least one argument" << std::endl;
         return 1;
+    }
+
+    float density = 30.f;
+
+    if (argc >= 3) {
+        density = stof(std::string(argv[2]));
     }
 
     using Triangle = geometry::Triangle<3, float>;
@@ -170,7 +176,7 @@ int main(int argc, char** argv) {
     camera.SetDistance(2 * largestLength);
     camera.Rotate(-20.f * M_PI / 180.f, 0);
 
-    auto samples = sampling::SampleMesh<float>(mesh, largestLength / 20.f);
+    auto samples = sampling::SampleMesh<float>(mesh, largestLength / density);
     sampleData = reinterpret_cast<const float*>(samples.data());
     sampleCount = samples.size();
 

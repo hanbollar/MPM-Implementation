@@ -21,7 +21,7 @@ protected:
     using Base = accel::TreeBuilder<Object, TreeBuilder<Object, B, L>>;
     using bound_t = core::AxisAlignedBox<TreeBuilder::kDimension, float>;
     using centroid_t = Eigen::Matrix<float, TreeBuilder::kDimension, 1>;
-    
+
     friend Base;
 
     struct ObjectInfo {

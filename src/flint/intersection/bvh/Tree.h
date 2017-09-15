@@ -11,37 +11,13 @@
 
 namespace intersection {
 namespace BVH {
-    
+
     namespace detail {
         template <typename Tree, typename Ray, IntersectionOptions Options>
         struct Intersect : public IntersectBase<Ray, Options> {
-        // struct Intersect : public intersection::Intersect<Tree, Ray, Options, Intersect<Tree, Ray, Options>> {
-            // using Base = intersection::Intersect<Tree, Ray, Options, Intersect<Tree, Ray, Options>>;
 
             template <int GroupSize>
             using IntersectionInfoGroup = intersection::IntersectionInfoGroup<GroupSize, Options>;
-
-            // template <int GroupSize, typename RayIterator>
-            // IntersectionInfoGroup<GroupSize> IntersectRaysImpl(const Tree* tree, RayIterator rayBegin, RayIterator rayEnd) const {
-            //     using RayGroup = intersection::RayGroup<Ray, GroupSize>;
-            //     using Intersection = intersection::IntersectionInfoGroup<GroupSize, Options>;
-            //     Intersection intersections(rayEnd - rayBegin);
-                
-            //     std::vector<RayGroup> groups;
-            //     unsigned int groupCount = (rayEnd - rayBegin + GroupSize - 1) / GroupSize;
-            //     groups.reserve(groupCount);
-
-            //     for (auto i = rayBegin; i < rayEnd; i += GroupSize) {
-            //         auto end = i + GroupSize;
-            //         groups.emplace_back(i, end > rayEnd ? rayEnd : end);
-            //     }
-
-            //     for (unsigned int i = 0; i < groupCount; ++i) {
-            //         intersections.block(GroupSize*i, Intersection::kCountIndex, GroupSize, 1) = IntersectRayGroup<GroupSize>(tree, groups[i]);
-            //     }
-
-            //     return intersections;
-            // }
 
             template <int GroupSize>
             IntersectionInfoGroup<GroupSize> IntersectRayGroup(const Tree* tree, const intersection::RayGroup<Ray, GroupSize>& rays) const {
@@ -56,20 +32,21 @@ namespace BVH {
 
                 std::vector<Node> stack;
                 stack.emplace_back(Node { current, rays.Mask() });
-                
+
                 do {
                     auto current = stack.back();
                     stack.pop_back();
                     const auto& bound = current.node->GetBound();
-                    
+
                     auto boundIntersection = IntersectBound(bound, rays);
                     const auto& tNear = boundIntersection[0];
                     const auto& tFar = boundIntersection[1];
+                    auto boundHitMask = (tNear.array() >= 0.f) && (tNear.array() <= tFar.array());
 
                     for (unsigned int r = 0; r < GroupSize; ++r) {
-                        current.mask.set(r, current.mask[r] && (tNear(r, 0) <= tFar(r, 0)));
+                        current.mask.set(r, current.mask[r] && boundHitMask(r, 0));
                     }
-                    
+
                     if (current.mask.none()) {
                         continue;
                     } else {
@@ -81,15 +58,24 @@ namespace BVH {
                         for (const auto* object : current.node->IterateObjects()) {
                             using IntersectObject = object::IntersectObject<typename std::remove_pointer<decltype(object)>::type, Ray, Options>;
                             const auto objectIntersections = IntersectObject::template Intersect<GroupSize>(object, rays);
-                            
-                            intersections.col(IntersectionInfoGroup<GroupSize>::kCountIndex) += objectIntersections.col(IntersectionInfoGroup<GroupSize>::kCountIndex);
-                            
+
+                            static constexpr unsigned int kCountIndex = IntersectionInfoGroup<GroupSize>::kCountIndex;
+                            static constexpr unsigned int kNearIndex = IntersectionInfoGroup<GroupSize>::kNearIndex;
+                            static constexpr unsigned int kFarIndex = IntersectionInfoGroup<GroupSize>::kFarIndex;
+
+                            intersections.col(kCountIndex) += objectIntersections.col(kCountIndex);
+
+                            auto mask = (objectIntersections.col(kCountIndex).array() != 0.0).template cast<float>();
                             if (Options & IntersectionOptions::Nearest) {
-                                intersections.col(IntersectionInfoGroup<GroupSize>::kNearIndex) = objectIntersections.col(IntersectionInfoGroup<GroupSize>::kNearIndex).array().min(intersections.col(IntersectionInfoGroup<GroupSize>::kNearIndex).array());
+                                intersections.col(kNearIndex) =
+                                    mask * objectIntersections.col(kNearIndex).array().min(intersections.col(kNearIndex).array()) +
+                                    (1.0 - mask) * intersections.col(kNearIndex).array();
                             }
 
                             if (Options & IntersectionOptions::Farthest) {
-                                intersections.col(IntersectionInfoGroup<GroupSize>::kFarIndex) = objectIntersections.col(IntersectionInfoGroup<GroupSize>::kFarIndex).array().max(intersections.col(IntersectionInfoGroup<GroupSize>::kFarIndex).array());
+                                intersections.col(kFarIndex) =
+                                    mask * objectIntersections.col(kFarIndex).array().max(intersections.col(kFarIndex).array()) +
+                                    (1.0 - mask) * intersections.col(kFarIndex).array();
                             }
                         }
                     }

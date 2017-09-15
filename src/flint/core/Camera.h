@@ -45,7 +45,7 @@ class Camera {
 
         if (_projectionDirty) {
             T mat00 = 1 / (_ratio * std::tan(0.5 * _fov));
-            T mat11 = 1 / tan(0.5 * _fov);
+            T mat11 = -1 / tan(0.5 * _fov);
             T mat22 = -(_near + _far) / (_far - _near);
             T mat32 = -(2 * _near * _far) / (_far - _near);
 
