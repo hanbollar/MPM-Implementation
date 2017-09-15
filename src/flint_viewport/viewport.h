@@ -21,7 +21,7 @@ class Viewport {
                 bool ShouldClose() const;
                 ~Window();
 
-                void Init();
+                void Init(int width, int height);
                 void SwapBuffers();
                 GLFWwindow* GetGLFWWindow() const;
 

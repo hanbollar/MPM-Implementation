@@ -15,23 +15,20 @@
 #include "flint/import/ObjLoader.h"
 #include "flint/intersection/Ray.h"
 #include "flint/intersection/bvh/Tree.h"
-#include "flint/sampling/Box.h"
-#include "flint/sampling/Mesh.h"
 #include "flint_viewport/viewport.h"
 
 using namespace core;
 
-const float* sampleData = nullptr;
-unsigned int sampleCount = 0;
 Camera<float> camera;
+std::vector<float> treeVBO;
 
 void Loop(display::Viewport::Window* window) {
-    window->Init(640, 480);
+    window->Init(3200, 2400);
 
-    GLuint sampleBuffer;
-    glGenBuffers(1, &sampleBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, sampleBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * sampleCount, sampleData, GL_STATIC_DRAW);
+    GLuint treeBuffer;
+    glGenBuffers(1, &treeBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, treeBuffer);
+    glBufferData(GL_ARRAY_BUFFER, treeVBO.size(), treeVBO.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     static std::string vsSource = R"(
@@ -124,11 +121,11 @@ void Loop(display::Viewport::Window* window) {
 
         glUniformMatrix4fv(viewProjectionMatrixLocation, 1, GL_FALSE, reinterpret_cast<const float*>(camera.GetViewProjection().data()));
 
-        glBindBuffer(GL_ARRAY_BUFFER, sampleBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, treeBuffer);
         glEnableVertexAttribArray(positionLocation);
         glVertexAttribPointer(positionLocation, 3, GL_FLOAT, false, 0, 0);
 
-        glDrawArrays(GL_POINTS, 0, sampleCount);
+        glDrawArrays(GL_LINES, 0, treeVBO.size());
 
         glDisableVertexAttribArray(positionLocation);
 
@@ -138,22 +135,16 @@ void Loop(display::Viewport::Window* window) {
         std::this_thread::sleep_for(16ms);
     }
 
-    glDeleteBuffers(1, &sampleBuffer);
+    glDeleteBuffers(1, &treeBuffer);
     glDeleteProgram(shaderProgram);
     glDeleteShader(vs);
     glDeleteShader(fs);
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::cerr << "Expected at least one argument" << std::endl;
+    if (argc != 2) {
+        std::cerr << "Expected one argument" << std::endl;
         return 1;
-    }
-
-    float density = 30.f;
-
-    if (argc >= 3) {
-        density = stof(std::string(argv[2]));
     }
 
     using Triangle = geometry::Triangle<3, float>;
@@ -162,10 +153,59 @@ int main(int argc, char** argv) {
     import::TriangleObjLoader<float> loader;
     loader.Load(argv[1], mesh);
 
+    accel::BVH::TreeBuilder<Triangle*, 2, 2> treeBuilder;
+    auto* tree = treeBuilder.Build(mesh->geometries().begin(), mesh->geometries().end());
+    using Tree = typename std::remove_pointer<decltype(tree)>::type;
+
+    tree->PreorderDFS([&](const Tree::Node* node) {
+        auto min = node->GetBound().min();
+        auto max = node->GetBound().max();
+
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
+
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
+
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
+
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
+
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
+
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
+
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
+
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
+
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
+
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
+
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
+
+        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
+        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
+    });
+
+    delete tree;
+
     Optional<AxisAlignedBox<3, float>> boundingBox;
     for (const auto* geometry : mesh->geometries()) {
         Merge(boundingBox, geometry->getAxisAlignedBound());
     }
+
+    delete mesh;
 
     auto largestLength = boundingBox->Extent(boundingBox->GreatestExtent());
 
@@ -173,14 +213,8 @@ int main(int argc, char** argv) {
     camera.SetAspectRatio(640.f / 480.f);
     camera.SetFieldOfView(60.f * M_PI / 180.f);
     camera.SetNearFar(0.1f, 2000.f);
-    camera.SetDistance(2 * largestLength);
+    camera.SetDistance(largestLength);
     camera.Rotate(-20.f * M_PI / 180.f, 0);
-
-    auto samples = sampling::SampleMesh<float>(mesh, largestLength / density);
-    sampleData = reinterpret_cast<const float*>(samples.data());
-    sampleCount = samples.size();
-
-    delete mesh;
 
     auto* viewport = new display::Viewport();
     std::thread viewportThread(Loop, viewport->GetWindow());

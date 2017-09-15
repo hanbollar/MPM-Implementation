@@ -46,13 +46,13 @@ bool Viewport::Window::ShouldClose() const {
     return viewport.ShouldClose() || glfwWindowShouldClose(window);
 }
 
-void Viewport::Window::Init() {
+void Viewport::Window::Init(int width, int height) {
     glfwSetErrorCallback(error_callback);
     if (!glfwInit()) {
         exit(EXIT_FAILURE);
     }
 
-    window = glfwCreateWindow(640, 480, "Viewport", NULL, NULL);
+    window = glfwCreateWindow(width, height, "Viewport", NULL, NULL);
     if (!window) {
         glfwTerminate();
         exit(EXIT_FAILURE);
