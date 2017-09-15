@@ -9,6 +9,7 @@
 #include "flint/accel/bvh/TreeBuilder.h"
 #include "flint/accel/bvh/Tree.h"
 #include "flint/core/AxisAlignedBox.h"
+#include "flint/core/Camera.h"
 #include "flint/core/Optional.h"
 #include "flint/geometry/Triangle.h"
 #include "flint/import/ObjLoader.h"
@@ -22,6 +23,7 @@ using namespace core;
 
 const float* sampleData = nullptr;
 unsigned int sampleCount = 0;
+Camera<float> camera;
 
 void Loop(display::Viewport::Window* window) {
     window->Init();
@@ -37,8 +39,10 @@ void Loop(display::Viewport::Window* window) {
 
         uniform mat4 viewProjectionMatrix;
         in vec3 position;
+        out vec3 color;
 
         void main() {
+            color = abs(normalize(position.xyz));
             gl_Position = viewProjectionMatrix * vec4(position, 1.0);
         }
     )";
@@ -46,8 +50,10 @@ void Loop(display::Viewport::Window* window) {
     static std::string fsSource = R"(
         #version 130
 
+        in vec3 color;
+
         void main() {
-            gl_FragColor  = vec4(1.0);
+            gl_FragColor = vec4(color, 1.0);
         }
     )";
 
@@ -105,25 +111,26 @@ void Loop(display::Viewport::Window* window) {
         std::cerr << "Could not get shader uniform viewProjectionMatrix" << std::endl;
     }
 
-    glVertexAttribPointer(positionLocation, 3, GL_FLOAT, false, 0, 0);
-
-    glUseProgram(shaderProgram);
-
     int width, height;
     glfwGetFramebufferSize(window->GetGLFWWindow(), &width, &height);
 
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glViewport(0, 0, width, height);
 
-    glBindBuffer(GL_ARRAY_BUFFER, sampleBuffer);
-
     while(!window->ShouldClose()) {
-        auto mvp = Eigen::Matrix4f::Identity();
-        glUniformMatrix4fv(viewProjectionMatrixLocation, 1, GL_FALSE, reinterpret_cast<const float*>(&mvp));
-
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        glUseProgram(shaderProgram);
+
+        glUniformMatrix4fv(viewProjectionMatrixLocation, 1, GL_FALSE, reinterpret_cast<const float*>(camera.GetViewProjection().data()));
+
+        glBindBuffer(GL_ARRAY_BUFFER, sampleBuffer);
+        glEnableVertexAttribArray(positionLocation);
+        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, false, 0, 0);
+
         glDrawArrays(GL_POINTS, 0, sampleCount);
+
+        glDisableVertexAttribArray(positionLocation);
 
         window->SwapBuffers();
 
@@ -154,7 +161,16 @@ int main(int argc, char** argv) {
         Merge(boundingBox, geometry->getAxisAlignedBound());
     }
 
-    auto samples = sampling::SampleMesh<float>(mesh, boundingBox->Extent(boundingBox->GreatestExtent()) / 10.f);
+    auto largestLength = boundingBox->Extent(boundingBox->GreatestExtent());
+
+    camera.LookAt( (boundingBox->max() + boundingBox->min()) / 2.f );
+    camera.SetAspectRatio(640.f / 480.f);
+    camera.SetFieldOfView(60.f * M_PI / 180.f);
+    camera.SetNearFar(0.1f, 2000.f);
+    camera.SetDistance(2 * largestLength);
+    camera.Rotate(-20.f * M_PI / 180.f, 0);
+
+    auto samples = sampling::SampleMesh<float>(mesh, largestLength / 20.f);
     sampleData = reinterpret_cast<const float*>(samples.data());
     sampleCount = samples.size();
 
