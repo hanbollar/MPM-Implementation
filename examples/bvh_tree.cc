@@ -28,7 +28,7 @@ void Loop(display::Viewport::Window* window) {
     GLuint treeBuffer;
     glGenBuffers(1, &treeBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, treeBuffer);
-    glBufferData(GL_ARRAY_BUFFER, treeVBO.size(), treeVBO.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, treeVBO.size() * sizeof(float), treeVBO.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     static std::string vsSource = R"(
@@ -125,7 +125,7 @@ void Loop(display::Viewport::Window* window) {
         glEnableVertexAttribArray(positionLocation);
         glVertexAttribPointer(positionLocation, 3, GL_FLOAT, false, 0, 0);
 
-        glDrawArrays(GL_LINES, 0, treeVBO.size());
+        glDrawArrays(GL_LINES, 0, treeVBO.size() / 3);
 
         glDisableVertexAttribArray(positionLocation);
 
@@ -153,50 +153,73 @@ int main(int argc, char** argv) {
     import::TriangleObjLoader<float> loader;
     loader.Load(argv[1], mesh);
 
-    accel::BVH::TreeBuilder<Triangle*, 2, 2> treeBuilder;
+    accel::BVH::TreeBuilder<Triangle*, 2, 1> treeBuilder;
     auto* tree = treeBuilder.Build(mesh->geometries().begin(), mesh->geometries().end());
     using Tree = typename std::remove_pointer<decltype(tree)>::type;
 
+    unsigned int nodeCount = 0;
+    unsigned int leafCount = 0;
+
+    auto addBound = [&](const AxisAlignedBox<3, float> &box) {
+        auto min = box.min();
+        auto max = box.max();
+
+        Eigen::Matrix<float, 3, 1> size = (max - min) / 2;
+        Eigen::Matrix<float, 3, 1> center = (max + min) / 2;
+
+        float x = size(0,0);
+        float y = size(1,0);
+        float z = size(2,0);
+
+        Eigen::Matrix<float, 3, 1> p0 = center + Eigen::Vector3f(-x, -y, -z);
+        Eigen::Matrix<float, 3, 1> p1 = center + Eigen::Vector3f(-x, -y,  z);
+        Eigen::Matrix<float, 3, 1> p2 = center + Eigen::Vector3f(-x,  y, -z);
+        Eigen::Matrix<float, 3, 1> p3 = center + Eigen::Vector3f(-x,  y,  z);
+        Eigen::Matrix<float, 3, 1> p4 = center + Eigen::Vector3f( x, -y, -z);
+        Eigen::Matrix<float, 3, 1> p5 = center + Eigen::Vector3f( x, -y,  z);
+        Eigen::Matrix<float, 3, 1> p6 = center + Eigen::Vector3f( x,  y, -z);
+        Eigen::Matrix<float, 3, 1> p7 = center + Eigen::Vector3f( x,  y,  z);
+
+        auto addPoint = [&](const Eigen::Matrix<float, 3, 1>& p) {
+            treeVBO.push_back(p(0,0)); treeVBO.push_back(p(1,0)); treeVBO.push_back(p(2,0));
+        };
+
+        addPoint(p0); addPoint(p1);
+        addPoint(p2); addPoint(p3);
+        addPoint(p0); addPoint(p2);
+        addPoint(p1); addPoint(p3);
+
+        addPoint(p4); addPoint(p5);
+        addPoint(p6); addPoint(p7);
+        addPoint(p4); addPoint(p6);
+        addPoint(p5); addPoint(p7);
+
+        addPoint(p0); addPoint(p4);
+        addPoint(p1); addPoint(p5);
+        addPoint(p2); addPoint(p6);
+        addPoint(p3); addPoint(p7);
+    };
+
     tree->PreorderDFS([&](const Tree::Node* node) {
+        nodeCount++;
+
+        bool leaf = true;
+        for (const auto* obj : node->IterateObjects()) {
+            if (obj) {
+                leaf = false;
+            }
+        }
+        if (leaf) {
+            leafCount++;
+        }
+
         auto min = node->GetBound().min();
         auto max = node->GetBound().max();
 
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
-
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
-
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
-
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
-
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
-
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
-
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
-
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
-
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
-
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(max(2,0));
-
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(min(2,0));
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(min(1,0)); treeVBO.push_back(max(2,0));
-
-        treeVBO.push_back(min(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
-        treeVBO.push_back(max(0,0)); treeVBO.push_back(max(1,0)); treeVBO.push_back(min(2,0));
+        addBound(node->GetBound());
     });
+
+    std::cout << nodeCount << " nodes " << leafCount << " leaves" << std::endl;
 
     delete tree;
 
@@ -213,8 +236,8 @@ int main(int argc, char** argv) {
     camera.SetAspectRatio(640.f / 480.f);
     camera.SetFieldOfView(60.f * M_PI / 180.f);
     camera.SetNearFar(0.1f, 2000.f);
-    camera.SetDistance(largestLength);
-    camera.Rotate(-20.f * M_PI / 180.f, 0);
+    camera.SetDistance(1.5 * largestLength);
+    camera.Rotate(-70.f * M_PI / 180.f, 0);
 
     auto* viewport = new display::Viewport();
     std::thread viewportThread(Loop, viewport->GetWindow());

@@ -26,7 +26,7 @@ unsigned int sampleCount = 0;
 Camera<float> camera;
 
 void Loop(display::Viewport::Window* window) {
-    window->Init(640, 480);
+    window->Init(1600, 1200);
 
     GLuint sampleBuffer;
     glGenBuffers(1, &sampleBuffer);
@@ -173,8 +173,8 @@ int main(int argc, char** argv) {
     camera.SetAspectRatio(640.f / 480.f);
     camera.SetFieldOfView(60.f * M_PI / 180.f);
     camera.SetNearFar(0.1f, 2000.f);
-    camera.SetDistance(2 * largestLength);
-    camera.Rotate(-20.f * M_PI / 180.f, 0);
+    camera.SetDistance(1.5 * largestLength);
+    camera.Rotate(-70.f * M_PI / 180.f, 0);
 
     auto samples = sampling::SampleMesh<float>(mesh, largestLength / density);
     sampleData = reinterpret_cast<const float*>(samples.data());

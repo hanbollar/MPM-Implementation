@@ -22,6 +22,9 @@ class FixedPolygon : public Geometry<D> {
             }
         }
 
+        FixedPolygon(const Eigen::Matrix<T, D, 3> &points) : points(points) {
+        }
+
         const Eigen::Matrix<T, D, N>& getPoints() const {
             return points;
         }
@@ -36,7 +39,7 @@ class FixedPolygon : public Geometry<D> {
 
             Eigen::Matrix<T, D, 1> m = points.col(0);
             Merge(bound, m);
-            for (unsigned int i = 0; i < N; ++i) {
+            for (unsigned int i = 1; i < N; ++i) {
                 m = points.col(i);
                 Merge(*bound, m);
             }
@@ -56,7 +59,7 @@ class FixedPolygon : public Geometry<D> {
         }
 
         virtual ~FixedPolygon() {
-            
+
         }
 };
 
