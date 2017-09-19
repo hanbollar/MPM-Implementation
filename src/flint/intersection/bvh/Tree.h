@@ -35,7 +35,7 @@ namespace BVH {
                     auto boundIntersection = IntersectBound(bound, rays);
                     const auto& tNear = boundIntersection[0];
                     const auto& tFar = boundIntersection[1];
-                    auto boundHitMask = (tNear.array() >= 0.f) && (tNear.array() <= tFar.array());
+                    auto boundHitMask = (tFar.array() >= 0.f) && (tNear.array() <= tFar.array());
 
                     for (unsigned int r = 0; r < GroupSize; ++r) {
                         data.mask.set(r, data.mask[r] && boundHitMask(r, 0));
@@ -77,7 +77,6 @@ namespace BVH {
                 };
 
                 tree->PreorderDFS(shouldVisit, visit, initialData, nextData);
-
                 return intersections;
             }
         };

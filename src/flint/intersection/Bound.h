@@ -22,17 +22,11 @@ std::array<Eigen::Array<float, GroupSize, 1>, 2> IntersectBound(const core::Axis
 
         using DimensionDistance = Eigen::Array<float, GroupSize, 1>;
 
-        Eigen::Select<decltype(mask), DimensionDistance, DimensionDistance> select0(
-            mask,
-            (bound.min(n) - rays.Origins(n).array()) / rays.Directions(n).array(),
-            DimensionDistance::Constant(0)
-        );
+        DimensionDistance d0 = (bound.min(n) - rays.Origins(n).array()) / rays.Directions(n).array();
+        DimensionDistance d1 = (bound.max(n) - rays.Origins(n).array()) / rays.Directions(n).array();
 
-        Eigen::Select<decltype(mask), DimensionDistance, DimensionDistance> select1(
-            mask,
-            (bound.max(n) - rays.Origins(n).array()) / rays.Directions(n).array(),
-            DimensionDistance::Constant(0)
-        );
+        Eigen::Select<decltype(mask), DimensionDistance, DimensionDistance> select0(mask, d0, DimensionDistance::Constant(0));
+        Eigen::Select<decltype(mask), DimensionDistance, DimensionDistance> select1(mask, d1, DimensionDistance::Constant(0));
 
         t0.col(n) = select0;
         t1.col(n) = select1;
@@ -49,6 +43,9 @@ std::array<Eigen::Array<float, GroupSize, 1>, 2> IntersectBound(const core::Axis
     std::array<Distance, 2> result;
     Distance& tNear = result[0];
     Distance& tFar = result[1];
+
+    tNear = Distance::Constant(std::numeric_limits<float>::max());
+    tFar = Distance::Constant(std::numeric_limits<float>::lowest());
 
     Eigen::Array<bool, GroupSize, 1> initialized = Eigen::Array<bool, GroupSize, 1>::Constant(false);
     for (unsigned int n = 0; n < Ray::kDimension; ++n) {

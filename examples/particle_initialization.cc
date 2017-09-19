@@ -26,7 +26,7 @@ unsigned int sampleCount = 0;
 Camera<float> camera;
 
 void Loop(display::Viewport::Window* window) {
-    window->Init(1600, 1200);
+    window->Init(640, 480);
 
     GLuint sampleBuffer;
     glGenBuffers(1, &sampleBuffer);
@@ -56,9 +56,6 @@ void Loop(display::Viewport::Window* window) {
             gl_FragColor = vec4(color, 1.0);
         }
     )";
-
-    const char* source;
-    int length;
 
     auto compileShader = [](GLenum type, const char* source, int length) {
         auto checkCompileStatus = [](GLuint shader) {
@@ -221,7 +218,7 @@ int main(int argc, char** argv) {
             }
 
             std::vector<png_bytep> row_pointers(height);
-            for (unsigned int y = 0; y < height; ++y) {
+            for (int y = 0; y < height; ++y) {
                 row_pointers[y] = _pixels.data() + width * y * 4;
             }
 

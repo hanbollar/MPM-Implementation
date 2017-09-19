@@ -88,7 +88,7 @@ typename std::enable_if<
     // }
 
     {
-        accel::BVH::TreeBuilder<GeometryType*, 4, 4> treeBuilder;
+        accel::BVH::TreeBuilder<GeometryType*, 2, 1> treeBuilder;
         auto* tree = treeBuilder.Build(mesh->geometries().begin(), mesh->geometries().end());
         using Tree = typename std::remove_pointer<decltype(tree)>::type;
 

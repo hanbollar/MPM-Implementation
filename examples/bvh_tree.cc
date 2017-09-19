@@ -54,9 +54,6 @@ void Loop(display::Viewport::Window* window) {
         }
     )";
 
-    const char* source;
-    int length;
-
     auto compileShader = [](GLenum type, const char* source, int length) {
         auto checkCompileStatus = [](GLuint shader) {
             GLint compileFlag;
@@ -213,9 +210,6 @@ int main(int argc, char** argv) {
             leafCount++;
         }
 
-        auto min = node->GetBound().min();
-        auto max = node->GetBound().max();
-
         addBound(node->GetBound());
     });
 
@@ -278,7 +272,7 @@ int main(int argc, char** argv) {
             }
 
             std::vector<png_bytep> row_pointers(height);
-            for (unsigned int y = 0; y < height; ++y) {
+            for (int y = 0; y < height; ++y) {
                 row_pointers[y] = _pixels.data() + width * y * 4;
             }
 
