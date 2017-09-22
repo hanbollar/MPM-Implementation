@@ -1,9 +1,9 @@
 
 #pragma once
 
-#include <math.h>
 #include <Eigen/Dense>
 #include <iostream>
+#include "Math.h"
 
 template <typename T>
 class Camera {
@@ -12,9 +12,9 @@ class Camera {
     T _altitude = 0;
     T _radius = 10;
     T _ratio = 1;
-    T _fov = M_PI / 2;
-    T _near = 0.1;
-    T _far = 1000;
+    T _fov = static_cast<T>(kPI / 2);
+    T _near = static_cast<T>(0.1);
+    T _far = static_cast<T>(1000);
 
     Eigen::Matrix<T, 3, 1> _center;
     mutable Eigen::Matrix<T, 3, 1> _eyeDir, _up, _right;
@@ -44,10 +44,10 @@ class Camera {
         }
 
         if (_projectionDirty) {
-            T mat00 = 1 / (_ratio * std::tan(0.5 * _fov));
-            T mat11 = -1 / tan(0.5 * _fov);
-            T mat22 = -(_near + _far) / (_far - _near);
-            T mat32 = -(2 * _near * _far) / (_far - _near);
+            T mat00 = static_cast<T>(1 / (_ratio * std::tan(0.5 * _fov)));
+            T mat11 = static_cast<T>(-1 / tan(0.5 * _fov));
+            T mat22 = static_cast<T>(-(_near + _far) / (_far - _near));
+            T mat32 = static_cast<T>(-(2 * _near * _far) / (_far - _near));
 
             T data[] = {
                 mat00,     0,     0,     0,
@@ -78,17 +78,17 @@ class Camera {
             _projectionDirty = true;
         }
 
-        void SetNearFar(T near, T far) {
-            _near = near;
-            _far = far;
+        void SetNearFar(T n, T f) {
+			_near = n;
+			_far = f;
             _projectionDirty = true;
         }
 
         void Rotate(T dAzimuth, T dAltitude) {
-            _azimuth = std::fmod(_azimuth + dAzimuth, 2 * M_PI);
+            _azimuth = static_cast<T>(std::fmod(_azimuth + dAzimuth, 2 * kPI));
             _altitude = _altitude + dAltitude;
 
-            static constexpr T kHalfPI = M_PI * 49.0 / 100.0;
+            static constexpr T kHalfPI = static_cast<T>(kPI * 49.0 / 100.0);
             _altitude = _altitude < -kHalfPI ? -kHalfPI : _altitude;
             _altitude = _altitude > kHalfPI ? kHalfPI : _altitude;
             _viewDirty = true;

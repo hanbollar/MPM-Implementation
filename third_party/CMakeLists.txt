@@ -1,9 +1,15 @@
 
 include(ExternalProject)
 
+if (WIN32)
+    # By default, ExternalProject finds the wrong git
+    find_package(Git REQUIRED)
+    set(GIT_EXECUTABLE "C:/Program Files/Git/cmd/git.exe")
+endif()
+
 ExternalProject_Add(eigen
-    HG_REPOSITORY https://bitbucket.org/eigen/eigen
-    HG_TAG 3.3.4
+    GIT_REPOSITORY https://github.com/RLovelett/eigen.git
+    GIT_TAG 3.3.4
     UPDATE_COMMAND ""
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
@@ -23,14 +29,23 @@ ExternalProject_Add(tinyobjloader
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
 )
 
-ExternalProject_Add(glfw
+ExternalProject_Add(GLAD
+    GIT_REPOSITORY https://github.com/Dav1dde/glad.git
+	GIT_TAG v0.1.14a0
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR} -DGLAD_INSTALL:BOOL=ON
+)
+
+add_library(glad STATIC IMPORTED GLOBAL)
+set_target_properties(glad PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}glad${CMAKE_STATIC_LIBRARY_SUFFIX})
+
+ExternalProject_Add(GLFW
     GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG 3.1
+    GIT_TAG 3.2.1
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
 )
 
-add_library(glfw3 STATIC IMPORTED GLOBAL)
-set_target_properties(glfw3 PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}glfw3${CMAKE_STATIC_LIBRARY_SUFFIX})
+add_library(glfw STATIC IMPORTED GLOBAL)
+set_target_properties(glfw PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}glfw3${CMAKE_STATIC_LIBRARY_SUFFIX})
 set(GLFW_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include PARENT_SCOPE)
 
 ExternalProject_Add(png

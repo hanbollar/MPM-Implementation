@@ -60,9 +60,9 @@ private:
 
   struct TrivialStorage {
     union {
-      bool hasValue;
+      bool hasValue = false;
       struct {
-        bool _hasValue = false;
+        bool _hasValue;
         Value value;
       };
     };

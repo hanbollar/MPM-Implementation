@@ -1,15 +1,14 @@
 
-#define GL_GLEXT_PROTOTYPES
-
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <GL/gl.h>
-#include <png.h>
+#include <glad/glad.h>
+// #include <png.h>
 #include "flint/accel/bvh/TreeBuilder.h"
 #include "flint/accel/bvh/Tree.h"
 #include "flint/core/AxisAlignedBox.h"
 #include "flint/core/Camera.h"
+#include "flint/core/Math.h"
 #include "flint/core/Optional.h"
 #include "flint/geometry/Triangle.h"
 #include "flint/import/ObjLoader.h"
@@ -168,14 +167,14 @@ int main(int argc, char** argv) {
 
     camera.LookAt( (boundingBox->max() + boundingBox->min()) / 2.f );
     camera.SetAspectRatio(640.f / 480.f);
-    camera.SetFieldOfView(60.f * M_PI / 180.f);
+    camera.SetFieldOfView(60.f * static_cast<float>(kPI) / 180.f);
     camera.SetNearFar(0.1f, 2000.f);
-    camera.SetDistance(1.5 * largestLength);
-    camera.Rotate(-70.f * M_PI / 180.f, 0);
+    camera.SetDistance(1.5f * largestLength);
+    camera.Rotate(-70.f * static_cast<float>(kPI) / 180.f, 0);
 
     auto samples = sampling::SampleMesh<float>(mesh, largestLength / density);
     sampleData = reinterpret_cast<const float*>(samples.data());
-    sampleCount = samples.size();
+    sampleCount = static_cast<unsigned int>(samples.size());
 
     delete mesh;
 
@@ -184,7 +183,7 @@ int main(int argc, char** argv) {
 
     viewport->CaptureFrame([&](const GLubyte* pixels, int width, int height) {
         if ([&](){
-            if (!pixels) return 1;
+            /*if (!pixels) return 1;
 
             FILE *fp = fopen("capture.png", "wb");
             if (!fp) return 1;
@@ -228,7 +227,7 @@ int main(int argc, char** argv) {
 
             png_write_end(png, nullptr);
 
-            fclose(fp);
+            fclose(fp);*/
 
             return 0;
         }()) {
@@ -237,7 +236,7 @@ int main(int argc, char** argv) {
             std::cout << "Saved png file" << std::endl;
         }
 
-        viewport->Close();
+        // viewport->Close();
     });
 
     viewportThread.join();

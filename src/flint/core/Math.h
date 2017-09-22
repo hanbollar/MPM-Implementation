@@ -1,7 +1,10 @@
 
+#pragma once
+
+static constexpr double kPI = 3.14159265358979;
 
 namespace core {
-    
+
 template <typename T>
 constexpr bool IsPowerOfTwo(T n) {
     return (n != 0) && ((n & (n - 1)) == 0);
@@ -19,5 +22,13 @@ constexpr T Align(T value) {
     T alignment = static_cast<T>(Alignment);
     return (value + (alignment - 1)) & ~(alignment - 1);
 }
-    
+
+template <typename T>
+constexpr T constPow(const T base, const unsigned int exponent) {
+	if (exponent == 0) {
+		return 1;
+	}
+	return base * constPow(base, exponent - 1);
+}
+
 }

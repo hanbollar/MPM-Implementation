@@ -104,15 +104,8 @@ AxisAlignedBox<N, T>& Merge(AxisAlignedBox<N, T> &a, const AxisAlignedBox<N, T> 
     return a.Merge(b);
 }
 
-template <int N, typename T, typename InputBox>
-typename std::enable_if<
-    std::is_same<
-    Optional<AxisAlignedBox<N, T>>,
-    Optional<typename std::remove_const<InputBox>::type>
-    >::value,
-    AxisAlignedBox<N, T>&
->::type
-Merge(AxisAlignedBox<N, T> &a, Optional<InputBox> &b) {
+template <int N, typename T>
+AxisAlignedBox<N, T>& Merge(AxisAlignedBox<N, T> &a, Optional<const AxisAlignedBox<N, T>> &b) {
     if (b.hasValue()) {
         a.Merge(b.value());
     }
@@ -163,15 +156,8 @@ AxisAlignedBox<N, T>& Merge(Optional<AxisAlignedBox<N, T>> &&a, const Eigen::Mat
     return a.value();
 }
 
-template <int N, typename T, typename InputBox>
-typename std::enable_if<
-    std::is_same<
-    Optional<AxisAlignedBox<N, T>>,
-    Optional<typename std::remove_const<InputBox>::type>
-    >::value,
-    Optional<AxisAlignedBox<N, T>>&
->::type
-Merge(Optional<AxisAlignedBox<N, T>> &a, Optional<InputBox> &b) {
+template <int N, typename T>
+Optional<AxisAlignedBox<N, T>>& Merge(Optional<AxisAlignedBox<N, T>> &a, Optional<AxisAlignedBox<N, T>> &b) {
     if (a.hasValue()) {
         if (b.hasValue()) {
             a.value().Merge(b.value());
@@ -184,15 +170,8 @@ Merge(Optional<AxisAlignedBox<N, T>> &a, Optional<InputBox> &b) {
     return a;
 }
 
-template <int N, typename T, typename InputBox>
-typename std::enable_if<
-    std::is_same<
-    Optional<AxisAlignedBox<N, T>>,
-    Optional<typename std::remove_const<InputBox>::type>
-    >::value,
-    Optional<AxisAlignedBox<N, T>>&
->::type
-Merge(Optional<AxisAlignedBox<N, T>> &a, const Optional<InputBox> &b) {
+template <int N, typename T>
+Optional<AxisAlignedBox<N, T>>& Merge(Optional<AxisAlignedBox<N, T>> &a, Optional<const AxisAlignedBox<N, T>> &b) {
     if (a.hasValue()) {
         if (b.hasValue()) {
             a.value().Merge(b.value());
@@ -205,15 +184,50 @@ Merge(Optional<AxisAlignedBox<N, T>> &a, const Optional<InputBox> &b) {
     return a;
 }
 
-template <int N, typename T, typename InputVec>
-typename std::enable_if<
-    std::is_same<
-    Optional<Eigen::Matrix<T, N, 1>>,
-    Optional<typename std::remove_const<InputVec>::type>
-    >::value,
-    Optional<AxisAlignedBox<N, T>>&
->::type
-Merge(Optional<AxisAlignedBox<N, T>> &a, Optional<InputVec> &b) {
+template <int N, typename T>
+Optional<AxisAlignedBox<N, T>>& Merge(Optional<AxisAlignedBox<N, T>> &a, const Optional<AxisAlignedBox<N, T>> &b) {
+    if (a.hasValue()) {
+        if (b.hasValue()) {
+            a.value().Merge(b.value());
+        }
+    } else {
+        if (b.hasValue()) {
+            a.set(b.value());
+        }
+    }
+    return a;
+}
+
+template <int N, typename T>
+Optional<AxisAlignedBox<N, T>>& Merge(Optional<AxisAlignedBox<N, T>> &a, const Optional<const AxisAlignedBox<N, T>> &b) {
+    if (a.hasValue()) {
+        if (b.hasValue()) {
+            a.value().Merge(b.value());
+        }
+    } else {
+        if (b.hasValue()) {
+            a.set(b.value());
+        }
+    }
+    return a;
+}
+
+template <int N, typename T>
+Optional<AxisAlignedBox<N, T>>& Merge(Optional<AxisAlignedBox<N, T>> &a, Optional<Eigen::Matrix<T, N, 1>> &b) {
+    if (a.hasValue()) {
+        if (b.hasValue()) {
+            a.value().Merge(b);
+        }
+    } else {
+        if (b.hasValue()) {
+            a.set(AxisAlignedBox<N, T> {b, b});
+        }
+    }
+    return a;
+}
+
+template <int N, typename T>
+Optional<AxisAlignedBox<N, T>>& Merge(Optional<AxisAlignedBox<N, T>> &a, Optional<const Eigen::Matrix<T, N, 1>> &b) {
     if (a.hasValue()) {
         if (b.hasValue()) {
             a.value().Merge(b);

@@ -38,10 +38,10 @@ class FixedPolygon : public Geometry<D> {
             if (N == 0) return bound;
 
             Eigen::Matrix<T, D, 1> m = points.col(0);
-            Merge(bound, m);
+            Merge<D, T>(bound, m);
             for (unsigned int i = 1; i < N; ++i) {
                 m = points.col(i);
-                Merge(*bound, m);
+                Merge<D, T>(*bound, m);
             }
             return bound;
         }

@@ -44,7 +44,7 @@ namespace BVH {
                     return !data.mask.none();
                 };
 
-                auto visit = [&](NodePtr node, Data& data) {
+                auto visit = [&rays, &intersections](NodePtr node, Data& data) {
                     for (const auto* object : node->IterateObjects()) {
                         using IntersectObject = object::IntersectObject<typename std::remove_pointer<decltype(object)>::type, Ray, Options>;
                         const auto objectIntersections = IntersectObject::template Intersect<GroupSize>(object, rays);

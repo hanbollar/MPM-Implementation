@@ -1,13 +1,12 @@
 
-#define GL_GLEXT_PROTOTYPES
-
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <GL/gl.h>
-#include <png.h>
+#include <glad/glad.h>
+// #include <png.h>
 #include "flint/accel/bvh/TreeBuilder.h"
 #include "flint/accel/bvh/Tree.h"
+#include "flint/core/Math.h"
 #include "flint/core/AxisAlignedBox.h"
 #include "flint/core/Camera.h"
 #include "flint/core/Optional.h"
@@ -122,7 +121,7 @@ void Loop(display::Viewport::Window* window) {
         glEnableVertexAttribArray(positionLocation);
         glVertexAttribPointer(positionLocation, 3, GL_FLOAT, false, 0, 0);
 
-        glDrawArrays(GL_LINES, 0, treeVBO.size() / 3);
+        glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(treeVBO.size() / 3));
 
         glDisableVertexAttribArray(positionLocation);
 
@@ -228,10 +227,10 @@ int main(int argc, char** argv) {
 
     camera.LookAt( (boundingBox->max() + boundingBox->min()) / 2.f );
     camera.SetAspectRatio(640.f / 480.f);
-    camera.SetFieldOfView(60.f * M_PI / 180.f);
+    camera.SetFieldOfView(60.f * static_cast<float>(kPI) / 180.f);
     camera.SetNearFar(0.1f, 2000.f);
-    camera.SetDistance(1.5 * largestLength);
-    camera.Rotate(-70.f * M_PI / 180.f, 0);
+    camera.SetDistance(1.5f * largestLength);
+    camera.Rotate(-70.f * static_cast<float>(kPI) / 180.f, 0);
 
     auto* viewport = new display::Viewport();
     std::thread viewportThread(Loop, viewport->GetWindow());
@@ -240,7 +239,7 @@ int main(int argc, char** argv) {
         if ([&](){
             if (!pixels) return 1;
 
-            FILE *fp = fopen("capture.png", "wb");
+            /*FILE *fp = fopen("capture.png", "wb");
             if (!fp) return 1;
 
             png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
@@ -282,7 +281,7 @@ int main(int argc, char** argv) {
 
             png_write_end(png, nullptr);
 
-            fclose(fp);
+            fclose(fp);*/
 
             return 0;
         }()) {

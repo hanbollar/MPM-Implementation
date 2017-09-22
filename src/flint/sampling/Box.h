@@ -5,6 +5,7 @@
 #include <random>
 #include "accel/ValueGrid.h"
 #include "core/AxisAlignedBox.h"
+#include "core/Math.h"
 #include "Random.h"
 
 namespace sampling {
@@ -12,14 +13,14 @@ namespace sampling {
 // https://www.cct.lsu.edu/~fharhad/ganbatte/siggraph2007/CD2/content/sketches/0250.pdf
 template <typename SamplePrecision, int N, typename T>
 std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlignedBox<N, T> &box, SamplePrecision minDistance, RandomGenerator rng = RandomGenerator()) {
-    SamplePrecision cellSize = minDistance / std::sqrt(N);
+    SamplePrecision cellSize = static_cast<SamplePrecision>(minDistance / std::sqrt(N));
 
     using sample_t = Eigen::Array<SamplePrecision, N, 1>;
     using sample_cell_t = Eigen::Array<unsigned int, N, 1>;
 
     sample_cell_t gridSize;
     for (int i = 0; i < N; ++i) {
-        gridSize(i, 0) = std::ceil(box.Extent(i) / cellSize);
+        gridSize(i, 0) = static_cast<unsigned int>(std::ceil(box.Extent(i) / cellSize));
     }
 
     std::vector<sample_t> samples;
@@ -43,7 +44,7 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
     static constexpr unsigned int k = 32;
     std::array<sample_t, k> testSamples;
 
-    while(unsigned int n = activeList.size()) {
+    while(unsigned int n = static_cast<unsigned int>(activeList.size())) {
         unsigned int i = static_cast<unsigned int>(static_cast<float>(n) * unif01(rng));
         sample_t& xi = samples[activeList[i]];
 
@@ -54,18 +55,18 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
             }
 
             sample /= sample.matrix().norm();
-            sample *= std::pow(unifR(rng), 1.0 / N);
+            sample *= static_cast<SamplePrecision>(std::pow(unifR(rng), 1.0 / N));
         }
 
         for (unsigned int s = 0; s < k; ++s) {
             testSamples[s] += xi;
         }
-
-        static constexpr unsigned int cellCount = static_cast<unsigned int>(std::pow(3, N));
+		
+        static constexpr unsigned int cellCount = static_cast<unsigned int>(core::constPow(3, N));
         std::array<sample_cell_t, cellCount> offsets;
         for (unsigned int c = 0; c < cellCount; ++c) {
             for (unsigned int n = 0; n < N; ++n) {
-                offsets[c](n, 0) = static_cast<unsigned int>(c / std::pow(3, N - 1)) % 3;
+                offsets[c](n, 0) = static_cast<unsigned int>(c / (cellCount / 3)) % 3;
             }
         }
 
@@ -102,8 +103,8 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
 
             if (found) {
                 keep = true;
-                activeList.push_back(samples.size());
-                sampleIndices[origin] = samples.size();
+                activeList.push_back(static_cast<unsigned int>(samples.size()));
+                sampleIndices[origin] = static_cast<int>(samples.size());
                 samples.push_back(testSamples[s]);
                 break;
             }

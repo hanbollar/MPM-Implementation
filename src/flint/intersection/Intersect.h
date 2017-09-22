@@ -11,12 +11,10 @@ enum IntersectionOptions {
     Count = 1 << 2,
 };
 
-#define IntersectionInfoBase(Options) Eigen::Matrix<float, N, (Options & IntersectionOptions::Nearest) + (Options & IntersectionOptions::Farthest) + 1>
-
 template <int N, IntersectionOptions Options>
-struct IntersectionInfoGroup : public IntersectionInfoBase(Options) {
+struct IntersectionInfoGroup : public Eigen::Matrix<float, N, (Options & IntersectionOptions::Nearest) + (Options & IntersectionOptions::Farthest) + 1> {
     
-    using Base = IntersectionInfoBase(Options);
+    using Base = Eigen::Matrix<float, N, (Options & IntersectionOptions::Nearest) + (Options & IntersectionOptions::Farthest) + 1>;
     
     static constexpr unsigned int kNearIndex = 0;
     static constexpr unsigned int kFarIndex = kNearIndex + (Options & IntersectionOptions::Nearest);

@@ -11,8 +11,9 @@ namespace object {
         struct IntersectTriangle : public IntersectBase<Ray, Options> {
 
             template <unsigned int GroupSize>
-            static IntersectionInfoGroup<GroupSize, Options> Intersect(const Triangle* triangle, const intersection::RayGroup<Ray, GroupSize>& rays) {
-                IntersectionInfoGroup<GroupSize, Options> intersections;
+            static intersection::IntersectionInfoGroup<GroupSize, Options> Intersect(const Triangle* triangle, const intersection::RayGroup<Ray, GroupSize>& rays) {
+				using IntersectionInfo = intersection::IntersectionInfoGroup<GroupSize, Options>;
+				IntersectionInfo intersections;
                 
                 const auto& points = triangle->getPoints();
                 
@@ -54,15 +55,13 @@ namespace object {
                 u = u.cwiseProduct(denom);
                 v = v.cwiseProduct(denom);
                 t = t.cwiseProduct(denom);
-                
-                using IntersectionInfo = IntersectionInfoGroup<GroupSize, Options>;
 
                 intersections.col(IntersectionInfo::kCountIndex) = (
                     (u.array() >= RowVec::Zero().array()) && 
                     (u.array() < RowVec::Ones().array()) &&
                     (v.array() >= RowVec::Zero().array()) &&
                     (u.array() + v.array() < RowVec::Ones().array()) &&
-                    (det.array().abs() > RowVec::Constant(0.0001).array()) &&
+                    (det.array().abs() > RowVec::Constant(static_cast<Scalar>(0.00001)).array()) &&
                     (t.array() >= RowVec::Zero().array())
                 ).transpose().template cast<float>();
 

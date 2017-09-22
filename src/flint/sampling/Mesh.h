@@ -38,7 +38,7 @@ typename std::enable_if<
         uint64_t mortonCode = 0;
         for (unsigned n = 0; n < Mesh::kDimension; ++n) {
             auto t01 = (samples[i](n, 0) - boundingBox->min(n)) / boundingBox->Extent(n);
-            uint64_t val = t01 * UINT64_MAX;
+            uint64_t val = static_cast<uint64_t>(t01 * UINT64_MAX);
             for (uint64_t b = 0; b < (sizeof(uint64_t) * CHAR_BIT) / Mesh::kDimension; ++b) {
                 auto mask = static_cast<uint64_t>(1) << b;
                 auto position = (Mesh::kDimension - n) * b;
@@ -63,7 +63,7 @@ typename std::enable_if<
 
     static constexpr unsigned int kRayGroupSize = 4;
 
-    auto rayGroups = intersection::CreateRayGroups<kRayGroupSize>(rays.data(), rays.size());
+    auto rayGroups = intersection::CreateRayGroups<kRayGroupSize>(rays.data(), static_cast<unsigned int>(rays.size()));
 
     using GeometryType = typename Mesh::GeometryType;
 

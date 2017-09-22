@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <chrono>
+#include <glad/glad.h>
 #include "viewport.h"
 
 namespace display {
@@ -52,6 +53,11 @@ void Viewport::Window::Init(int width, int height) {
         exit(EXIT_FAILURE);
     }
 
+	// glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	// glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	// glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	// glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+
     window = glfwCreateWindow(width, height, "Viewport", NULL, NULL);
     if (!window) {
         glfwTerminate();
@@ -59,6 +65,11 @@ void Viewport::Window::Init(int width, int height) {
     }
 
     glfwMakeContextCurrent(window);
+
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+		std::cout << "Failed to initialize OpenGL context" << std::endl;
+		exit(EXIT_FAILURE);
+	}
 }
 
 void Viewport::Window::SwapBuffers() {

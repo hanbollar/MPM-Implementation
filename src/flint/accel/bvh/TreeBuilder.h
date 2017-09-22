@@ -37,12 +37,12 @@ private:
     bool FindSplit(unsigned int begin, unsigned int end, ObjectInfo* objectInfos, unsigned int* axisPtr, float* split, bool* firstSplitSmaller) const {
         constexpr unsigned int kBinCount = 12;
         constexpr unsigned int kSplits = kBinCount - 1;
-        constexpr float kEpsilon = 0.99;
+        constexpr float kEpsilon = 0.99f;
 
         // Get a bounding box of all object centroids
-        bound_t centroidBound = Merge(core::Optional<bound_t>(), objectInfos[begin].centroid);
+        bound_t centroidBound = Merge<TreeBuilder::kDimension, float>(core::Optional<bound_t>(), objectInfos[begin].centroid);
         for (unsigned int i = begin + 1; i < end; ++i) {
-            Merge(centroidBound, objectInfos[i].centroid);
+            Merge<TreeBuilder::kDimension, float>(centroidBound, objectInfos[i].centroid);
         }
 
         *axisPtr = centroidBound.GreatestExtent();
@@ -56,8 +56,11 @@ private:
 
             // Sort the objects into bins
             for (unsigned int i = begin; i < end; ++i) {
-                unsigned int bin = kBinCount * kEpsilon * (objectInfos[i].centroid[axis] - centroidBound.min(axis)) / (centroidBound.max(axis) - centroidBound.min(axis));
-                Merge(binBounds_[bin], objectInfos[i].bound);
+                unsigned int bin = static_cast<unsigned int>(
+					kBinCount * kEpsilon * (objectInfos[i].centroid[axis] - centroidBound.min(axis)) /
+					(centroidBound.max(axis) - centroidBound.min(axis))
+				);
+                Merge<TreeBuilder::kDimension, float>(binBounds_[bin], objectInfos[i].bound);
             }
 
             // Compute the cost of each bin split
@@ -66,9 +69,9 @@ private:
                 core::Optional<bound_t> upper_;
                 for (unsigned int b = 0; b < kBinCount; ++b) {
                     if (b <= s) {
-                        Merge(lower_, binBounds_[b]);
+                        Merge<TreeBuilder::kDimension, float>(lower_, binBounds_[b]);
                     } else {
-                        Merge(upper_, binBounds_[b]);
+                        Merge<TreeBuilder::kDimension, float>(upper_, binBounds_[b]);
                     }
                 }
 
@@ -112,7 +115,7 @@ private:
             }
 
             // A split has been made. Continue splitting with the larger side until the desired branching factor is reached
-            unsigned int mid = ptr - objectInfos;
+            unsigned int mid = static_cast<unsigned int>(ptr - objectInfos);
 
             if (firstSplitSmaller) {
                 partitions[count].first = begin;
@@ -344,9 +347,9 @@ private:
             }
         });
 
-        // Node_t* root = ThreadedBuild<NodeAllocator>(0, objectInfos.size(), objectInfos.data());
-        Node_t* root = IterativeBuild(0, objectInfos.size(), objectInfos.data(), nodeAllocator);
-        // Node_t* root = RecursiveBuild(0, objectInfos.size(), objectInfos.data(), nodeAllocator);
+        // Node_t* root = ThreadedBuild<NodeAllocator>(0, static_cast<unsigned int>(objectInfos.size()), objectInfos.data());
+        Node_t* root = IterativeBuild(0, static_cast<unsigned int>(objectInfos.size()), objectInfos.data(), nodeAllocator);
+        // Node_t* root = RecursiveBuild(0, static_cast<unsigned int>(objectInfos.size()), objectInfos.data(), nodeAllocator);
         return new Tree_t(root);
     }
 

@@ -2,28 +2,37 @@ file(GLOB_RECURSE SOURCES *.cc)
 file(GLOB_RECURSE HEADERS *.h)
 
 find_package(OpenGL REQUIRED)
-if(NOT OPENGL_FOUND)
+if(NOT OpenGL_FOUND)
     message(ERROR "OpenGL not found")
-endif(NOT OPENGL_FOUND)
+endif()
 
-find_package(X11 REQUIRED)
-if(NOT X11_FOUND)
-    message(ERROR "x11 not found")
-endif(NOT X11_FOUND)
+list(APPEND FLINT_VIEWPORT_LINK_LIBRARIES
+    glfw
+    glad
+    ${OPENGL_LIBRARIES}
+)
+
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+    if(NOT X11_FOUND)
+        message(ERROR "x11 not found")
+    endif()
+
+    list(APPEND FLINT_VIEWPORT_LINK_LIBRARIES
+        ${X11_LIBRARIES}
+        ${X11_Xxf86vm_LIB}
+        ${X11_Xcursor_LIB}
+        ${X11_Xrandr_LIB}
+        ${X11_Xi_LIB}
+        ${X11_Xinerama_LIB}
+    )
+endif()
+
 
 add_library(flint_viewport ${SOURCES} ${HEADERS})
 set_target_properties(flint_viewport PROPERTIES LINKER_LANGUAGE CXX)
-add_dependencies(flint_viewport glfw)
-target_link_libraries(flint_viewport
-    glfw3
-    ${OPENGL_LIBRARY}
-    ${X11_LIBRARIES}
-    ${X11_Xxf86vm_LIB}
-    ${X11_Xcursor_LIB}
-    ${X11_Xrandr_LIB}
-    ${X11_Xi_LIB}
-    ${X11_Xinerama_LIB}
-)
+add_dependencies(flint_viewport GLFW GLAD)
+target_link_libraries(flint_viewport ${FLINT_VIEWPORT_LINK_LIBRARIES})
 
 set(INCLUDE_DEST "include/flint_viewport")
 set(LIB_DEST "lib/${CMAKE_BUILD_TYPE}")
