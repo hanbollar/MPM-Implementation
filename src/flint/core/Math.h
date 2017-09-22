@@ -25,10 +25,7 @@ constexpr T Align(T value) {
 
 template <typename T>
 constexpr T constPow(const T base, const unsigned int exponent) {
-	if (exponent == 0) {
-		return 1;
-	}
-	return base * constPow(base, exponent - 1);
+	return exponent == 0 ? 1 : base * constPow(base, exponent - 1);
 }
 
 }

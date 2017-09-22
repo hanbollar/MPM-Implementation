@@ -71,7 +71,8 @@ typename std::enable_if<
     {
         intersection::object::IntersectObject<GeometryType, Ray, intersection::IntersectionOptions::Count> intersect;
         for (unsigned int i = 0; i < rayGroups.size(); ++i) {
-            using IntersectionInfoGroup = typename decltype(intersect)::template IntersectionInfoGroup<kRayGroupSize>;
+            using IntersectType = decltype(intersect);
+            using IntersectionInfoGroup = typename IntersectType::template IntersectionInfoGroup<kRayGroupSize>;
             IntersectionInfoGroup intersections;
             for (const auto* geometry : mesh->geometries()) {
                 intersections.col(IntersectionInfoGroup::kCountIndex) += intersect.template Intersect<kRayGroupSize>(geometry, rayGroups[i]).col(IntersectionInfoGroup::kCountIndex);
