@@ -6,6 +6,17 @@ cmake ../
 make
 ```
 
+# Building on Windows
+```
+mkdir build && cd build
+cmake-gui ..
+```
+
+Configure for VS 2015/17 within Cmake-gui
+Generate
+
+In the build folder (in file explorer), open the newly generated Visual Studio solution
+
 # Running Headless
 
 ```
