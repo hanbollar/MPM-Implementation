@@ -17,7 +17,11 @@ if (MSVC)
   endif()
 
   if (CMAKE_BUILD_TYPE MATCHES "Rel")
-    add_compile_options(-Ox)
+    add_compile_options(-Ox -Qpar)
+  endif()
+
+  if (CMAKE_BUILD_TYPE MATCHES "Info")
+    add_compile_options(-Qpar-report=2)
   endif()
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wfatal-errors")

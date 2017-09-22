@@ -68,36 +68,16 @@ typename std::enable_if<
     using GeometryType = typename Mesh::GeometryType;
 
     unsigned int hitCount = 0;
-    // {
-    //     intersection::object::IntersectObject<GeometryType, Ray, intersection::IntersectionOptions::Count> intersect;
-    //     for (unsigned int i = 0; i < rayGroups.size(); ++i) {
-    //         using IntersectionInfoGroup = typename decltype(intersect)::template IntersectionInfoGroup<kRayGroupSize>;
-    //         IntersectionInfoGroup intersections;
-    //         for (const auto* geometry : mesh->geometries()) {
-    //             intersections.col(IntersectionInfoGroup::kCountIndex) += intersect.template Intersect<kRayGroupSize>(geometry, rayGroups[i]).col(IntersectionInfoGroup::kCountIndex);
-    //         }
-    //         using array_t = decltype(intersections.col(IntersectionInfoGroup::kCountIndex).array());
-    //         auto inside = intersections.col(IntersectionInfoGroup::kCountIndex).array().cwiseProduct(array_t::Constant(0.5)).floor().cwiseProduct(array_t::Constant(2.f)).cwiseNotEqual(intersections.col(IntersectionInfoGroup::kCountIndex).array());
-
-    //         for (unsigned int r = 0; r < kRayGroupSize; ++r) {
-    //             if (inside(r, 0)) {
-    //                 samples[hitCount++] = sortedSamples[4*i + r].sample;
-    //             }
-    //         }
-    //     }
-    // }
-
     {
-        accel::BVH::TreeBuilder<GeometryType*, 2, 1> treeBuilder;
-        auto* tree = treeBuilder.Build(mesh->geometries().begin(), mesh->geometries().end());
-        using Tree = typename std::remove_pointer<decltype(tree)>::type;
-
+        intersection::object::IntersectObject<GeometryType, Ray, intersection::IntersectionOptions::Count> intersect;
         for (unsigned int i = 0; i < rayGroups.size(); ++i) {
-            intersection::BVH::Intersect<Tree, Ray, intersection::IntersectionOptions::Count> intersect;
-            auto intersections = intersect.IntersectRayGroup(tree, rayGroups[i]);
-
-            using array_t = decltype(intersections.col(0).array());
-            auto inside = intersections.col(0).array().cwiseProduct(array_t::Constant(0.5)).floor().cwiseProduct(array_t::Constant(2.f)).cwiseNotEqual(intersections.col(0).array());
+            using IntersectionInfoGroup = typename decltype(intersect)::template IntersectionInfoGroup<kRayGroupSize>;
+            IntersectionInfoGroup intersections;
+            for (const auto* geometry : mesh->geometries()) {
+                intersections.col(IntersectionInfoGroup::kCountIndex) += intersect.template Intersect<kRayGroupSize>(geometry, rayGroups[i]).col(IntersectionInfoGroup::kCountIndex);
+            }
+            using array_t = decltype(intersections.col(IntersectionInfoGroup::kCountIndex).array());
+            auto inside = intersections.col(IntersectionInfoGroup::kCountIndex).array().cwiseProduct(array_t::Constant(0.5)).floor().cwiseProduct(array_t::Constant(2.f)).cwiseNotEqual(intersections.col(IntersectionInfoGroup::kCountIndex).array());
 
             for (unsigned int r = 0; r < kRayGroupSize; ++r) {
                 if (inside(r, 0)) {
@@ -105,9 +85,29 @@ typename std::enable_if<
                 }
             }
         }
-
-        delete tree;
     }
+
+    // {
+    //     accel::BVH::TreeBuilder<GeometryType*, 2, 1> treeBuilder;
+    //     auto* tree = treeBuilder.Build(mesh->geometries().begin(), mesh->geometries().end());
+    //     using Tree = typename std::remove_pointer<decltype(tree)>::type;
+
+    //     for (unsigned int i = 0; i < rayGroups.size(); ++i) {
+    //         intersection::BVH::Intersect<Tree, Ray, intersection::IntersectionOptions::Count> intersect;
+    //         auto intersections = intersect.IntersectRayGroup(tree, rayGroups[i]);
+
+    //         using array_t = decltype(intersections.col(0).array());
+    //         auto inside = intersections.col(0).array().cwiseProduct(array_t::Constant(0.5)).floor().cwiseProduct(array_t::Constant(2.f)).cwiseNotEqual(intersections.col(0).array());
+
+    //         for (unsigned int r = 0; r < kRayGroupSize; ++r) {
+    //             if (inside(r, 0)) {
+    //                 samples[hitCount++] = sortedSamples[4*i + r].sample;
+    //             }
+    //         }
+    //     }
+
+    //     delete tree;
+    // }
 
     std::cout << hitCount << " hits" << std::endl;
     samples.resize(hitCount);
