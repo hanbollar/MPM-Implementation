@@ -27,7 +27,7 @@ class RayGroup  {
                 Direction(i) = (begin + i)->Direction();
                 _mask.set(i, true);
             }
-            for (unsigned int i = (end - begin); i < N; ++i) {
+            for (unsigned int i = static_cast<unsigned int>(end - begin); i < N; ++i) {
                 _mask.set(i, false);
             }
         }
