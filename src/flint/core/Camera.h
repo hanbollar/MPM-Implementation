@@ -28,19 +28,20 @@ class Camera {
             Eigen::AngleAxis<T> r1(_altitude, Eigen::Matrix<T, 3, 1> {0, 0, 1} );
             Eigen::AngleAxis<T> r2(_azimuth, Eigen::Matrix<T, 3, 1> {0, 1, 0} );
 
-            _eyeDir = (r2 * r1 * Eigen::Matrix<T, 3, 1> {1, 0, 0});
-            _right = (-_eyeDir).cross(Eigen::Matrix<T, 3, 1> { 0, 1, 0 }).normalized();
-            _up = _eyeDir.cross(_right).normalized();
+            _eyeDir = r2 * r1 * Eigen::Matrix<T, 3, 1>{ 1, 0, 0 };
+            Eigen::Matrix<T, 3, 1> eyePos = _center + _eyeDir * _radius;
 
-            auto eyePos = _center + _eyeDir * _radius;
+            _right = (-_eyeDir).cross(Eigen::Matrix<T, 3, 1> { 0, 1, 0 }).normalized();
+            _up = _right.cross(-_eyeDir);
+
             T data[] = {
-                _right(0, 0), _up(0, 0), -_eyeDir(0, 0), -_right.dot(eyePos),
-                _right(1, 0), _up(1, 0), -_eyeDir(1, 0), -_up.dot(eyePos),
-                _right(2, 0), _up(2, 0), -_eyeDir(2, 0), -_eyeDir.dot(eyePos),
-                0, 0, 0, 1,
+                _right(0, 0), _up(0, 0), _eyeDir(0, 0), 0,
+                _right(1, 0), _up(1, 0), _eyeDir(1, 0), 0,
+                _right(2, 0), _up(2, 0), _eyeDir(2, 0), 0,
+                -_right.dot(eyePos), -_up.dot(eyePos), -_eyeDir.dot(eyePos), 1,
             };
 
-            _view = Eigen::Matrix<T, 4, 4>(data).transpose();
+            _view = Eigen::Matrix<T, 4, 4>(data);
         }
 
         if (_projectionDirty) {
@@ -79,8 +80,8 @@ class Camera {
         }
 
         void SetNearFar(T n, T f) {
-			_near = n;
-			_far = f;
+            _near = n;
+            _far = f;
             _projectionDirty = true;
         }
 
@@ -95,7 +96,7 @@ class Camera {
         }
 
         void Pan(T dX, T dY) {
-            this->Recalulate();
+            this->Recalculate();
             _center += _right * dX * _radius + _up * dY * _radius;
             _viewDirty = true;
         }
