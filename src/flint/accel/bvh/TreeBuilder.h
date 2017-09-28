@@ -192,7 +192,7 @@ private:
         struct IterationInfo {
             unsigned int begin;
             unsigned int end;
-            Node_t** node = nullptr;
+            Node_t** node;
         };
 
         std::vector<IterationInfo> stack;
