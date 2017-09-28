@@ -17,6 +17,7 @@
 #include "flint/sampling/Box.h"
 #include "flint/sampling/Mesh.h"
 #include "flint_viewport/viewport.h"
+#include "flint_viewport/CameraControls.h"
 
 using namespace core;
 
@@ -26,6 +27,8 @@ Camera<float> camera;
 
 void Loop(display::Viewport::Window* window) {
     window->Init(640, 480);
+    CameraControls<float> controls(camera, window->GetGLFWWindow());
+    controls.SetCurrent();
 
     GLuint sampleBuffer;
     glGenBuffers(1, &sampleBuffer);

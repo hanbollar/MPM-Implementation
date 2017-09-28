@@ -15,6 +15,7 @@
 #include "flint/intersection/Ray.h"
 #include "flint/intersection/bvh/Tree.h"
 #include "flint_viewport/viewport.h"
+#include "flint_viewport/CameraControls.h"
 
 using namespace core;
 
@@ -23,6 +24,8 @@ std::vector<float> treeVBO;
 
 void Loop(display::Viewport::Window* window) {
     window->Init(3200, 2400);
+    CameraControls<float> controls(camera, window->GetGLFWWindow());
+    controls.SetCurrent();
 
     GLuint treeBuffer;
     glGenBuffers(1, &treeBuffer);
