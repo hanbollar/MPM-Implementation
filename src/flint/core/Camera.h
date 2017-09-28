@@ -45,7 +45,7 @@ class Camera {
 
         if (_projectionDirty) {
             T mat00 = static_cast<T>(1 / (_ratio * std::tan(0.5 * _fov)));
-            T mat11 = static_cast<T>(-1 / tan(0.5 * _fov));
+            T mat11 = static_cast<T>(1 / tan(0.5 * _fov));
             T mat22 = static_cast<T>(-(_near + _far) / (_far - _near));
             T mat32 = static_cast<T>(-(2 * _near * _far) / (_far - _near));
 
