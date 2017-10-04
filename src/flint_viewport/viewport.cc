@@ -47,6 +47,10 @@ bool Viewport::Window::ShouldClose() const {
     return viewport.ShouldClose() || glfwWindowShouldClose(window);
 }
 
+bool Viewport::Window::IsInitialized() const {
+    return initialized;
+}
+
 void Viewport::Window::Init(int width, int height) {
     glfwSetErrorCallback(error_callback);
     if (!glfwInit()) {
@@ -66,10 +70,12 @@ void Viewport::Window::Init(int width, int height) {
 
     glfwMakeContextCurrent(window);
 
-	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-		std::cout << "Failed to initialize OpenGL context" << std::endl;
-		exit(EXIT_FAILURE);
-	}
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        std::cout << "Failed to initialize OpenGL context" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    initialized = true;
 }
 
 void Viewport::Window::SwapBuffers() {
