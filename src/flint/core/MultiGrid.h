@@ -28,6 +28,8 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
     }
 
     public:
+        MultiGrid() { }
+
         template<typename... Args>
         MultiGrid(Args&&... sizes) : sizes { sizes... } {
             unsigned int accum = 1;
