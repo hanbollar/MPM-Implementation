@@ -3,7 +3,6 @@
 
 #include <chrono>
 #include <random>
-#include "accel/ValueGrid.h"
 #include "core/AxisAlignedBox.h"
 #include "core/Math.h"
 #include "core/MultiGrid.h"
@@ -39,7 +38,7 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
     core::MultiGrid<float, N> backgroundGrid(backgroundGridSize);
     backgroundGrid.Fill(-1);
 
-    
+
 
     std::uniform_real_distribution<float> unif01(0, 1);
     std::uniform_real_distribution<SamplePrecision> unif11(-1, 1);
