@@ -6,6 +6,7 @@
 #include "accel/ValueGrid.h"
 #include "core/AxisAlignedBox.h"
 #include "core/Math.h"
+#include "core/MultiGrid.h"
 #include "Random.h"
 
 namespace sampling {
@@ -23,9 +24,22 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
         gridSize(i, 0) = static_cast<unsigned int>(std::ceil(box.Extent(i) / cellSize));
     }
 
+    auto cellToGridIndex = [](const sample_cell_t &cell) {
+        core::MultiGrid<float, N>::Index index;
+        for (unsigned int i = 0; i < N; ++i) {
+            index[i] = cell(i, 0);
+        }
+        return index;
+    };
+
     std::vector<sample_t> samples;
-    accel::ValueGrid<N, int> sampleIndices(gridSize, -1);
     std::vector<unsigned int> activeList;
+
+    core::MultiGrid<float, N>::Index backgroundGridSize = cellToGridIndex(gridSize);
+    core::MultiGrid<float, N> backgroundGrid(backgroundGridSize);
+    backgroundGrid.Fill(-1);
+
+    
 
     std::uniform_real_distribution<float> unif01(0, 1);
     std::uniform_real_distribution<SamplePrecision> unif11(-1, 1);
@@ -38,7 +52,7 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
     x0 = x0 * (box.max() - box.min()) + box.min();
 
     samples.push_back(x0);
-    sampleIndices[ ((x0 - box.min()) / cellSize).template cast<unsigned int>() ] = 0;
+    backgroundGrid[cellToGridIndex(((x0 - box.min()) / cellSize).template cast<unsigned int>())] = 0;
     activeList.push_back(0);
 
     static constexpr unsigned int k = 32;
@@ -61,7 +75,7 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
         for (unsigned int s = 0; s < k; ++s) {
             testSamples[s] += xi;
         }
-		
+
         static constexpr unsigned int cellCount = static_cast<unsigned int>(core::constPow(3, N));
         std::array<sample_cell_t, cellCount> offsets;
         for (unsigned int c = 0; c < cellCount; ++c) {
@@ -90,7 +104,7 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
 
             for (unsigned int c = 0; c < cellCount; ++c) {
                 auto cell = origin + offsets[c];
-                indices[c] = cellInBounds(cell) ? sampleIndices[cell] : -1;
+                indices[c] = cellInBounds(cell) ? backgroundGrid[cellToGridIndex(cell)] : -1;
 
                 int i = indices[c];
                 if (i < 0) continue;
@@ -104,7 +118,7 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
             if (found) {
                 keep = true;
                 activeList.push_back(static_cast<unsigned int>(samples.size()));
-                sampleIndices[origin] = static_cast<int>(samples.size());
+                backgroundGrid[cellToGridIndex(origin)] = static_cast<int>(samples.size());
                 samples.push_back(testSamples[s]);
                 break;
             }

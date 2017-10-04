@@ -1,6 +1,6 @@
 
 #pragma once
-
+/*
 #include <Eigen/Dense>
 
 namespace accel {
@@ -23,7 +23,7 @@ class ValueGrid {
             }
             values = decltype(values)::Constant(pitch(N - 1, 0) * dimension(N - 1, 0), 1, init);
         }
-        
+
         const T& operator[](unsigned int index) const {
             return values(index, 0);
         }
@@ -56,6 +56,6 @@ class ValueGrid {
         Eigen::Array<unsigned int, N, 1> dimension;
         Eigen::Array<unsigned int, N, 1> pitch;
         Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic> values;
-}; 
+};
 
-}
+}*/
