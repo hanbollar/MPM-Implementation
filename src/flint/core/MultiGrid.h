@@ -49,12 +49,14 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
 
         template<typename... Args>
         const T& operator()(Args&&... indices) const {
-            return contents[computeIndex(indices)];
+            Index i = { indices... };
+            return contents[computeIndex(i)];
         }
 
         template<typename... Args>
         T& operator()(Args&&... indices) {
-            return contents[computeIndex(indices)];
+            Index i = { indices... };
+            return contents[computeIndex(i)];
         }
 
         const T& operator[](const Index &indices) const {
