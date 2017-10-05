@@ -8,30 +8,22 @@ namespace core {
 template <typename T, unsigned int Dimension>
 class MultiGridBase {
     public:
-		using Index = std::array<unsigned int, Dimension>;
+        using Index = std::array<unsigned int, Dimension>;
 
         virtual void Fill(const T& value) = 0;
 };
 
 template <typename T, unsigned int Dimension>
 class MultiGrid : public MultiGridBase<T, Dimension> {
-    Index sizes;
-    Index strides;
-    std::vector<T> contents;
-
-    unsigned int computeIndex(const Index &indices) const {
-        unsigned int index = 0;
-        for (unsigned int d = 0; d < Dimension; ++d) {
-            index += indices[d] * strides[d];
-        }
-        return index;
-    }
+    
 
     public:
+        using Index = typename MultiGridBase<T, Dimension>::Index;
+
         MultiGrid() { }
 
         template<typename... Args>
-        MultiGrid(Args&&... sizes) : sizes { sizes... } {
+        MultiGrid(Args&&... _sizes) : sizes { _sizes... } {
             unsigned int accum = 1;
             for (unsigned int d = 0; d < Dimension; ++d) {
                 strides[d] = accum;
@@ -74,6 +66,19 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
                 contents[i] = value;
             }
         }
+
+    private:
+        Index sizes;
+        Index strides;
+        std::vector<T> contents;
+
+        unsigned int computeIndex(const Index &indices) const {
+            unsigned int index = 0;
+            for (unsigned int d = 0; d < Dimension; ++d) {
+                index += indices[d] * strides[d];
+            }
+            return index;
+        }
 };
 
 template <typename T, unsigned int Dimension>
@@ -82,6 +87,8 @@ class ResizeableMultiGrid : public MultiGridBase<T, Dimension> {
     std::vector<InnerGrid> contents;
 
     public:
+        using Index = typename MultiGridBase<T, Dimension>::Index;
+
         ResizeableMultiGrid() { }
 
         template<typename... Args>
@@ -104,12 +111,12 @@ class ResizeableMultiGrid : public MultiGridBase<T, Dimension> {
         }
 
         const T& operator[](const Index &indices) const {
-            const InnerGrid::Index& innerIndices = *reinterpret_cast<const InnerGrid::Index*>(&indices[1]);
+            const typename InnerGrid::Index& innerIndices = *reinterpret_cast<const typename InnerGrid::Index*>(&indices[1]);
             return contents[indices[0]][innerIndices];
         }
 
         T& operator[](const Index &indices) {
-            const InnerGrid::Index& innerIndices = *reinterpret_cast<const InnerGrid::Index*>(&indices[1]);
+            const typename InnerGrid::Index& innerIndices = *reinterpret_cast<const typename InnerGrid::Index*>(&indices[1]);
             return contents[indices[0]][innerIndices];
         }
 
@@ -122,7 +129,7 @@ class ResizeableMultiGrid : public MultiGridBase<T, Dimension> {
         }
 
         void Resize(const Index &sizes) {
-            const InnerGrid::Index& innerSizes = *reinterpret_cast<const InnerGrid::Index*>(&sizes[1]);
+            const typename InnerGrid::Index& innerSizes = *reinterpret_cast<const typename InnerGrid::Index*>(&sizes[1]);
             contents.resize(sizes[0], InnerGrid(innerSizes));
             for (auto& content : contents) {
                 content.Resize(innerSizes);
@@ -141,6 +148,8 @@ class ResizeableMultiGrid<T, 1> : public MultiGridBase<T, 1> {
     std::vector<T> contents;
 
     public:
+        using Index = typename MultiGridBase<T, 1>::Index;
+
         ResizeableMultiGrid() { }
 
         ResizeableMultiGrid(unsigned int size) : contents(size) { }
@@ -184,23 +193,25 @@ class StaticMultiGrid : public MultiGridBase<T, sizeof...(Args)> {
     std::array<InnerGrid, Dimension> contents;
 
     public:
-        template<typename... Args>
-        const T& operator()(unsigned int index, Args&&... indices) const {
-            return contents[index](std::forward<Args>(sizes)...);
+        using Index = typename MultiGridBase<T, sizeof...(Args)>::Index;
+
+        template<typename... _Args>
+        const T& operator()(unsigned int index, _Args&&... indices) const {
+            return contents[index](std::forward<Args>(indices)...);
         }
 
-        template<typename... Args>
-        T& operator()(unsigned int index, Args&&... indices) {
-            return contents[index](std::forward<Args>(sizes)...);
+        template<typename... _Args>
+        T& operator()(unsigned int index, _Args&&... indices) {
+            return contents[index](std::forward<_Args>(indices)...);
         }
 
         const T& operator[](const Index &indices) const {
-            const InnerGrid::Index& innerIndices = *reinterpret_cast<const InnerGrid::Index*>(&indices[1]);
+            const typename InnerGrid::Index& innerIndices = *reinterpret_cast<const typename InnerGrid::Index*>(&indices[1]);
             return contents[indices[0]][innerIndices];
         }
 
         T& operator[](const Index &indices) {
-            const InnerGrid::Index& innerIndices = *reinterpret_cast<const InnerGrid::Index*>(&indices[1]);
+            const typename InnerGrid::Index& innerIndices = *reinterpret_cast<const typename InnerGrid::Index*>(&indices[1]);
             return contents[indices[0]][innerIndices];
         }
 
@@ -216,6 +227,8 @@ class StaticMultiGrid<T, Dimension> : public MultiGridBase<T, Dimension> {
     std::array<T, Dimension> contents;
 
     public:
+        using Index = typename MultiGridBase<T, 1>::Index;
+
         const T& operator()(unsigned int index) const {
             return contents[index];
         }
