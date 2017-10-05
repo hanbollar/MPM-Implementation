@@ -17,8 +17,31 @@
 #include "flint/sampling/Mesh.h"
 #include "flint_viewport/viewport.h"
 #include "flint_viewport/CameraControls.h"
+#include "simulation/MACGrid.h"
 
 using namespace core;
+
+enum class SimulationAttribute {
+    Mass,
+    Position,
+    Velocity,
+    Pressure,
+};
+
+struct GridAttributeDefinitions {
+    template <SimulationAttribute A>
+    struct AttributeInfo { };
+};
+
+template <>
+struct GridAttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity> {
+    using info = simulation::GridAttributeInfo<simulation::MAC::Attribute::Interpolated, float>;
+};
+
+template <>
+struct GridAttributeDefinitions::AttributeInfo<SimulationAttribute::Pressure> {
+    using info = simulation::GridAttributeInfo<simulation::MAC::Attribute::Grid, float>;
+};
 
 const float* sampleData = nullptr;
 unsigned int sampleCount = 0;
@@ -147,6 +170,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    simulation::MACGrid<3, SimulationAttribute, GridAttributeDefinitions,
+        SimulationAttribute::Velocity,
+        SimulationAttribute::Pressure
+    > grid(0.1f, 10.f, 20.f, 10.f);
+
+    auto& velocity = grid.GetGrid<SimulationAttribute::Velocity>();
+
     float density = 30.f;
 
     if (argc >= 3) {
@@ -191,7 +221,7 @@ int main(int argc, char** argv) {
     while (!viewport->GetWindow()->ShouldClose()) {
         auto start = std::chrono::system_clock::now();
         for (auto& sample : samples) {
-            sample[1] += 0.02 * std::sin(0.05 * step);
+            sample[1] += static_cast<float>(0.02 * std::sin(0.05 * step));
         }
         auto end = std::chrono::system_clock::now();
         auto elapsed = end - start;
