@@ -18,12 +18,59 @@
 #include "flint_viewport/viewport.h"
 #include "flint_viewport/CameraControls.h"
 #include "flint_viewport/gl/ShaderProgram.h"
+#include "simulation/ParticleSet.h"
+#include "simulation/AttributeGrid.h"
+#include "simulation/AttributeTransfer.h"
 
 using namespace core;
 
-const float* sampleData = nullptr;
-unsigned int sampleCount = 0;
+constexpr unsigned int kDimension = 3; // 3D simulation
+static constexpr auto simulationTimestep = std::chrono::duration<double, std::milli>(16); // timestep for simulation
+
 Camera<float> camera;
+
+// Declare attributes we will use in the simulation
+enum class SimulationAttribute {
+    Position,
+    Velocity,
+    Mass,
+};
+
+// Define the types of each simulation attribute
+struct AttributeDefinitions {
+    template <SimulationAttribute A>
+    struct AttributeInfo {};
+};
+
+template <>
+struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Position> {
+    using type = Eigen::Array<float, kDimension, 1>;
+};
+
+template <>
+struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity> {
+    using type = Eigen::Array<float, kDimension, 1>;
+};
+
+template <>
+struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Mass> {
+    using type = float;
+};
+
+// Declare the set of particle attributes
+simulation::ParticleSet<SimulationAttribute, AttributeDefinitions,
+    SimulationAttribute::Position,
+    SimulationAttribute::Velocity,
+    SimulationAttribute::Mass
+> particles;
+
+// Declare the grid attributes
+simulation::AttributeGrid<kDimension, float, SimulationAttribute, AttributeDefinitions,
+    SimulationAttribute::Velocity
+> grid;
+
+// Configure attribute transfer to transfer by position
+using AttributeTransfer = simulation::AttributeTransfer<kDimension, float, SimulationAttribute, SimulationAttribute::Position>;
 
 void Loop(display::Viewport::Window* window) {
     window->Init(640, 480);
@@ -69,18 +116,20 @@ void Loop(display::Viewport::Window* window) {
 
     shaderProgram.Use();
 
+    const auto& particlePositions = particles.GetAttributeList<SimulationAttribute::Position>();
+
     while(!window->ShouldClose()) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUniformMatrix4fv(shaderProgram.Uniform("viewProjectionMatrix"), 1, GL_FALSE, reinterpret_cast<const float*>(camera.GetViewProjection().data()));
 
         glBindBuffer(GL_ARRAY_BUFFER, sampleBuffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * sampleCount, sampleData, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * kDimension * particlePositions.size(), particlePositions.data(), GL_STATIC_DRAW);
 
         glEnableVertexAttribArray(shaderProgram.Attribute("position"));
-        glVertexAttribPointer(shaderProgram.Attribute("position"), 3, GL_FLOAT, false, 0, 0);
+        glVertexAttribPointer(shaderProgram.Attribute("position"), kDimension, GL_FLOAT, false, 0, 0);
 
-        glDrawArrays(GL_POINTS, 0, sampleCount);
+        glDrawArrays(GL_POINTS, 0, particlePositions.size());
 
         glDisableVertexAttribArray(shaderProgram.Attribute("position"));
 
@@ -110,13 +159,13 @@ int main(int argc, char** argv) {
     std::thread viewportThread(Loop, viewport->GetWindow());
 
     // Load in the input mesh
-    using Triangle = geometry::Triangle<3, float>;
-    auto* mesh = new geometry::Mesh<3, Triangle>();
+    using Triangle = geometry::Triangle<kDimension, float>;
+    auto* mesh = new geometry::Mesh<kDimension, Triangle>();
     import::TriangleObjLoader<float> loader;
     loader.Load(argv[1], mesh);
 
     // Compute the scene bounding box
-    Optional<AxisAlignedBox<3, float>> boundingBox;
+    Optional<AxisAlignedBox<kDimension, float>> boundingBox;
     for (const auto* geometry : mesh->geometries()) {
         Merge(boundingBox, geometry->getAxisAlignedBound());
     }
@@ -130,30 +179,68 @@ int main(int argc, char** argv) {
     camera.SetDistance(1.5f * largestLength);
     camera.Rotate(-70.f * static_cast<float>(kPI) / 180.f, 0);
 
+    // Initialize a grid to twice the size of the bounding box
+    Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 2.f;
+    Eigen::Array<float, kDimension, 1> gridOrigin = (boundingBox->max() + boundingBox->min()) / 2.f - gridSize / 2.f;
+    grid.Resize(2.f / density, gridSize);
+    
     // Generate samples inside the mesh
     auto samples = sampling::SampleMesh<float>(mesh, largestLength / density);
-    sampleData = reinterpret_cast<const float*>(samples.data());
-    sampleCount = static_cast<unsigned int>(samples.size());
     delete mesh; // mesh is no longer needed
 
-    static constexpr auto timestep = std::chrono::duration<double, std::milli>(4);
+    particles.Resize(samples.size());
+
+    // Initialize particle masses to 1
+    for (auto& particleMass : particles.GetAttributeList<SimulationAttribute::Mass>()) {
+        particleMass = 1.f;
+    }
+
+    // Initialize particle velocities to 0
+    for (auto& particleVelocity : particles.GetAttributeList<SimulationAttribute::Velocity>()) {
+        particleVelocity = 0.f;
+    }
+
+    // Set particle positions as sample positions
+    auto& particlePositions = particles.GetAttributeList<SimulationAttribute::Position>();
+    particlePositions = samples;
 
     // Wait in case the viewport has not yet been initialized
     while (!viewport->GetWindow()->IsInitialized()) {
-        std::this_thread::sleep_for(timestep);
+        std::this_thread::sleep_for(simulationTimestep);
     }
 
     // Step simulation until the viewport closes
     unsigned int step = 0;
     while (!viewport->GetWindow()->ShouldClose()) {
         auto start = std::chrono::system_clock::now();
-        for (auto& sample : samples) {
-            sample[1] += 0.02 * std::sin(0.05 * step);
+
+        auto& gridVelocities = grid.GetGrid<SimulationAttribute::Velocity>();
+
+        // Clear grid velocities
+        for (auto& gridVelocity : gridVelocities.IterateCells()) {
+            gridVelocity = { 0, 0, 0 };
         }
+
+        AttributeTransfer::ParticleToGrid<SimulationAttribute::Velocity>(particles, grid, gridOrigin);
+
+        // advect by gravity
+        for (auto& gridVelocity : gridVelocities.IterateCells()) {
+            gridVelocity[1] -= 9.80665 * simulationTimestep.count() / 1000.0;
+        }
+
+        // Transfer back to particles
+        AttributeTransfer::GridToParticle<SimulationAttribute::Velocity>(grid, gridOrigin, particles);
+
+        // Update positions
+        auto& particleVelocities = particles.GetAttributeList<SimulationAttribute::Velocity>();
+        for (unsigned int p = 0; p < particles.Size(); ++p) {
+            particlePositions[p] += particleVelocities[p] * simulationTimestep.count() / 1000.0;
+        }
+
         auto end = std::chrono::system_clock::now();
         auto elapsed = end - start;
-        if (elapsed < timestep) {
-            std::this_thread::sleep_for(timestep - elapsed);
+        if (elapsed < simulationTimestep) {
+            std::this_thread::sleep_for(simulationTimestep - elapsed);
         }
         step++;
     }
