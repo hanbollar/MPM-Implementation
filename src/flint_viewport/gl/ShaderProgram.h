@@ -42,6 +42,13 @@ class ShaderProgram {
         ~ShaderProgram();
 
     private:
+        struct cmp_str {
+            bool operator()(const char* a, const char* b) const {
+                return std::strcmp(a, b) < 0;
+            }
+        };
+        using LocationMap = std::map<const char*, GLint, cmp_str>;
+
         void AttachShaders(Shader& shader) {
             glAttachShader(shaderProgramId, shader.shaderId);
         }
@@ -52,7 +59,7 @@ class ShaderProgram {
             AttachShaders(std::forward<Args>(shaders)...);
         }
 
-        void GetShaderLocations(GLint(*getLocation)(GLuint, const char*), std::map<const char*, GLint>& locationMap, const char* name) {
+        void GetShaderLocations(GLint(*getLocation)(GLuint, const char*), LocationMap& locationMap, const char* name) {
             locationMap[name] = getLocation(shaderProgramId, name);
             if (locationMap[name] < 0) {
                 std::cerr << "Could not get shader location " << name << std::endl;
@@ -60,13 +67,14 @@ class ShaderProgram {
         }
 
         template <typename... Args>
-        void GetShaderLocations(GLint(*getLocation)(GLuint, const char*), std::map<const char*, GLint>& locationMap, const char* name, Args&& ...names) {
+        void GetShaderLocations(GLint(*getLocation)(GLuint, const char*), LocationMap& locationMap, const char* name, Args&& ...names) {
             GetShaderLocations(getLocation, locationMap, name);
         }
 
         void LinkProgram();
 
         GLuint shaderProgramId;
-        std::map<const char*, GLint> attributeLocations;
-        std::map<const char*, GLint> uniformLocations;
+
+        LocationMap attributeLocations;
+        LocationMap uniformLocations;
 };
