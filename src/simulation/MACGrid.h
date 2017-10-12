@@ -1,73 +1,61 @@
 
 #pragma once
 
+#include <tuple>
 #include "flint/core/MultiGrid.h"
+#include "AttributeStorage.h"
 
 namespace simulation {
 
-    namespace MAC {
-        enum class Attribute {
-            Grid,
-            Interpolated,
-        };
-    }
-
-    template <MAC::Attribute MACType, typename _type>
-    struct GridAttributeInfo {
-        static constexpr MAC::Attribute kMACType = MACType;
-        using type = _type;
+namespace MAC {
+    enum class Attribute {
+        Grid,
+        Interpolated,
     };
+}
 
-template <unsigned int Dimension, typename Attribute, typename AttributeDefinitions, Attribute... GridAttributes>
+template <MAC::Attribute _MACType, typename _Type>
+struct GridAttributeInfo {
+    static constexpr MAC::Attribute MACType = _MACType;
+    using Type = _Type;
+};
+
+template <unsigned int Dimension, typename Attribute, typename AttributeDefinitions, Attribute... Attributes>
 class MACGrid {
-    using Storage = std::tuple<core::MultiGrid<typename AttributeDefinitions::template AttributeInfo<GridAttributes>::info::type, Dimension>...>;
+    using Storage = std::tuple<typename std::conditional_t<
+        AttributeDefinitions::template AttributeInfo<Attributes>::Info::MACType == MAC::Attribute::Interpolated,
+        std::array<core::MultiGrid<typename AttributeDefinitions::template AttributeInfo<Attributes>::Info::Type, Dimension>, Dimension>,
+        core::MultiGrid<typename AttributeDefinitions::template AttributeInfo<Attributes>::Info::Type, Dimension>
+    >...>;
+    
+    using AttributeStorage = AttributeStorage<Attribute, Attributes...>;
+
     Storage storage;
-
-    static constexpr bool IsValidIndex(unsigned int i) {
-        return i < sizeof...(GridAttributes);
-    }
-
-    template <unsigned int I>
-    static constexpr Attribute IndexToAttribute() {
-        static_assert(IsValidIndex(I), "Attribute not found on MAC grid");
-        return std::get<I, Attribute, sizeof...(GridAttributes)>({ GridAttributes... });
-    }
-
-    template <Attribute A, unsigned int I = 0>
-    struct AttributeToIndex {
-        struct ValueHolder { static constexpr unsigned int value = I; };
-        static constexpr unsigned int value = std::conditional_t<IsValidIndex(I), ValueHolder, AttributeToIndex<A, I + 1>>::value;
-    };
-
-    template <size_t... I, typename F>
-    void ForEachGridImpl(std::index_sequence<I...>, F&& f) {
-        int result[] = { 0, ((void)f(std::get<I>(this->storage)), 0)... };
-    }
-
-    template <typename F>
-    void ForEachGrid(F&& f) {
-        ForEachGridImpl(std::make_index_sequence<sizeof...(GridAttributes)>(), std::forward<F>(f));
-    }
-
+    
     public:
         MACGrid() { }
 
         template <typename T, typename... Dimensions>
         MACGrid(T cellSize, Dimensions... dimensions) {
-            ForEachGrid([&](auto& grid) {
-                using Grid = typename std::remove_reference<decltype(grid)>::type;
+            AttributeStorage::ForEach(this->storage, [&](auto& grid, unsigned int index) {
+                /*using Grid = typename std::remove_reference<decltype(grid)>::type;
                 typename Grid::Index index;
                 std::array<T, Dimension> dims = { dimensions... };
                 for (unsigned int i = 0; i < Dimension; ++i) {
                     index[i] = dims[i] / cellSize;
                 }
-                grid = Grid(index);
+                grid = Grid(index);*/
             });
         }
 
         template <Attribute A>
-        constexpr decltype(auto) GetGrid() {
-            return std::get<AttributeToIndex<A>::value>(storage);
+        decltype(auto) GetGrid() {
+            return std::get<AttributeStorage::AttributeToIndex<A>::value>(storage);
+        }
+
+        template <Attribute A>
+        decltype(auto) GetGrid() const {
+            return std::get<AttributeStorage::AttributeToIndex<A>::value>(storage);
         }
 };
 

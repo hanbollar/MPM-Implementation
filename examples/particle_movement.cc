@@ -18,6 +18,7 @@
 #include "flint_viewport/viewport.h"
 #include "flint_viewport/CameraControls.h"
 #include "simulation/MACGrid.h"
+#include "simulation/ParticleSet.h"
 
 using namespace core;
 
@@ -35,12 +36,32 @@ struct GridAttributeDefinitions {
 
 template <>
 struct GridAttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity> {
-    using info = simulation::GridAttributeInfo<simulation::MAC::Attribute::Interpolated, float>;
+    using Info = simulation::GridAttributeInfo<simulation::MAC::Attribute::Interpolated, float>;
 };
 
 template <>
 struct GridAttributeDefinitions::AttributeInfo<SimulationAttribute::Pressure> {
-    using info = simulation::GridAttributeInfo<simulation::MAC::Attribute::Grid, float>;
+    using Info = simulation::GridAttributeInfo<simulation::MAC::Attribute::Grid, float>;
+};
+
+struct ParticleAttributeDefinitions {
+    template <SimulationAttribute A>
+    struct AttributeInfo { };
+};
+
+template <>
+struct ParticleAttributeDefinitions::AttributeInfo<SimulationAttribute::Position> {
+    using Info = simulation::ParticleAttributeInfo<Eigen::Array<float, 3, 1>>;
+};
+
+template <>
+struct ParticleAttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity> {
+    using Info = simulation::ParticleAttributeInfo<Eigen::Array<float, 3, 1>>;
+};
+
+template <>
+struct ParticleAttributeDefinitions::AttributeInfo<SimulationAttribute::Mass> {
+    using Info = simulation::ParticleAttributeInfo<float>;
 };
 
 const float* sampleData = nullptr;
@@ -170,13 +191,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    simulation::MACGrid<3, SimulationAttribute, GridAttributeDefinitions,
-        SimulationAttribute::Velocity,
-        SimulationAttribute::Pressure
-    > grid(0.1f, 10.f, 20.f, 10.f);
-
-    auto& velocity = grid.GetGrid<SimulationAttribute::Velocity>();
-
     float density = 30.f;
 
     if (argc >= 3) {
@@ -204,10 +218,34 @@ int main(int argc, char** argv) {
     camera.Rotate(-70.f * static_cast<float>(kPI) / 180.f, 0);
 
     auto samples = sampling::SampleMesh<float>(mesh, largestLength / density);
-    sampleData = reinterpret_cast<const float*>(samples.data());
-    sampleCount = static_cast<unsigned int>(samples.size());
-
     delete mesh;
+
+    simulation::MACGrid<3, SimulationAttribute, GridAttributeDefinitions,
+        SimulationAttribute::Velocity,
+        SimulationAttribute::Pressure
+    > grid(largestLength / density, boundingBox->Extent(0), boundingBox->Extent(1), boundingBox->Extent(2));
+
+    auto& gridVelocities = grid.GetGrid<SimulationAttribute::Velocity>();
+    auto& gridPressures = grid.GetGrid<SimulationAttribute::Pressure>();
+
+    simulation::ParticleSet<SimulationAttribute, ParticleAttributeDefinitions,
+        SimulationAttribute::Velocity,
+        SimulationAttribute::Position,
+        SimulationAttribute::Mass
+    > particleSet(samples.size());
+
+    auto& particlePositions = particleSet.GetAttributeList<SimulationAttribute::Position>();
+    particlePositions = samples;
+
+    auto& particleMasses = particleSet.GetAttributeList<SimulationAttribute::Mass>();
+    auto& particleVelocities = particleSet.GetAttributeList<SimulationAttribute::Velocity>();
+
+    for (unsigned int i = 0; i < particleSet.Size(); ++i) {
+        particleMasses[i] = 10.f;
+    }
+
+    sampleData = reinterpret_cast<const float*>(particlePositions.data());
+    sampleCount = static_cast<unsigned int>(particleSet.Size());
 
     auto* viewport = new display::Viewport();
     std::thread viewportThread(Loop, viewport->GetWindow());
@@ -220,8 +258,8 @@ int main(int argc, char** argv) {
     unsigned int step = 0;
     while (!viewport->GetWindow()->ShouldClose()) {
         auto start = std::chrono::system_clock::now();
-        for (auto& sample : samples) {
-            sample[1] += static_cast<float>(0.02 * std::sin(0.05 * step));
+        for (auto& position : particlePositions) {
+            position[1] += static_cast<float>(0.02 * std::sin(0.05 * step));
         }
         auto end = std::chrono::system_clock::now();
         auto elapsed = end - start;
