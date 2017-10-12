@@ -2,13 +2,14 @@
 #pragma once
 #include <array>
 #include <vector>
+#include <Eigen/Dense>
 
 namespace core {
 
 template <typename T, unsigned int Dimension>
 class MultiGridBase {
     public:
-        using Index = std::array<unsigned int, Dimension>;
+        using Index = Eigen::Array<unsigned int, Dimension, 1>;
 
         virtual void Fill(const T& value) = 0;
 };
@@ -61,10 +62,94 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
             return contents[computeIndex(indices)];
         }
 
+        const T* at(const Index &indices) const {
+            if ((indices >= sizes).any()) {
+                return nullptr;
+            }
+            return &contents[computeIndex(indices)];
+        }
+
+        T* at(const Index &indices) {
+            if ((indices >= sizes).any()) {
+                return nullptr;
+            }
+            return &contents[computeIndex(indices)];
+        }
+
         void Fill(const T& value) override {
             for (unsigned int i = 0; i < contents.size(); ++i) {
                 contents[i] = value;
             }
+        }
+
+        class CellIterator {
+            class iterator {
+                public:
+                    iterator(const Index& index, MultiGrid* grid) : index(index), grid(grid) { }
+                    
+                    iterator& operator++() {
+                        for (unsigned int d = 0; d < Dimension; ++d) {
+                            index[d]++;
+                            if (index[d] >= grid->sizes[d]) {
+                                index[d] = 0;
+                            } else {
+                                break;
+                            }
+                            if (d == Dimension - 1) {
+                                done = true;
+                            }
+                        }
+                        return *this;
+                    }
+
+                    T& operator*() const {
+                        return (*grid)[index];
+                    }
+
+                    friend bool operator!=(const iterator& a, const iterator& b) {
+                        for (unsigned int d = 0; d < Dimension; ++d) {
+                            if (a.done != b.done || a.index[d] != b.index[d]) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+
+                    friend bool operator==(const iterator& a, const iterator& b) {
+                        return !operator!=(a, b);
+                    }
+
+                private:
+                    bool done = false;
+                    Index index;
+                    MultiGrid* grid;
+            };
+            
+            public:
+                CellIterator(MultiGrid* grid) : grid(grid) { }
+
+                iterator begin() const {
+                    Index index;
+                    for (unsigned int d = 0; d < Dimension; ++d) {
+                        index[d] = 0;
+                    }
+
+                    return iterator(index, grid);
+                }
+                
+                iterator end() const {
+                    Index index = grid->sizes;
+                    iterator iter(index, grid);
+                    iter.operator++();
+                    return iter;
+                }
+
+            private:
+                MultiGrid* grid;
+        };
+
+        CellIterator IterateCells() {
+            return CellIterator(this);
         }
 
     private:
