@@ -34,7 +34,11 @@ enum class SimulationAttribute {
     Position,
     Velocity,
     Mass,
+	Weights
 };
+
+// Configure attribute transfer to transfer by position
+using AttributeTransfer = simulation::AttributeTransfer<kDimension, float, SimulationAttribute, SimulationAttribute::Position>;
 
 // Define the types of each simulation attribute
 struct AttributeDefinitions {
@@ -57,20 +61,25 @@ struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Mass> {
     using type = float;
 };
 
+template <>
+struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Weights> {
+	using type = AttributeTransfer::WeightVals;
+};
+
 // Declare the set of particle attributes
 simulation::ParticleSet<SimulationAttribute, AttributeDefinitions,
     SimulationAttribute::Position,
     SimulationAttribute::Velocity,
-    SimulationAttribute::Mass
+    SimulationAttribute::Mass,
+	SimulationAttribute::Weights
 > particles;
 
 // Declare the grid attributes
 simulation::AttributeGrid<kDimension, float, SimulationAttribute, AttributeDefinitions,
-    SimulationAttribute::Velocity
+    SimulationAttribute::Velocity //,
+	// SimulationAttribute::Position,
+	//SimulationAttribute::Mass
 > grid;
-
-// Configure attribute transfer to transfer by position
-using AttributeTransfer = simulation::AttributeTransfer<kDimension, float, SimulationAttribute, SimulationAttribute::Position>;
 
 void Loop(display::Viewport::Window* window) {
     window->Init(640, 480);
@@ -204,6 +213,18 @@ int main(int argc, char** argv) {
     auto& particlePositions = particles.GetAttributeList<SimulationAttribute::Position>();
     particlePositions = samples;
 
+	// Initialize grid weights for each particle
+	auto& velo_Grid = grid.GetGrid<SimulationAttribute::Velocity>();
+	int pw = 0;
+	for (auto& particleWeights : particles.GetAttributeList<SimulationAttribute::Weights>()) {
+		particleWeights.fill_Weights(particlePositions[pw],
+									grid.CellSize(),
+									velo_Grid);
+		// passing in velocity (instead of position) just so have sthg to check against for valid
+		// loc in grid
+		pw += 1;
+	}
+
     // Wait in case the viewport has not yet been initialized
     while (!viewport->GetWindow()->IsInitialized()) {
         std::this_thread::sleep_for(simulationTimestep);
@@ -224,8 +245,9 @@ int main(int argc, char** argv) {
         AttributeTransfer::ParticleToGrid<SimulationAttribute::Velocity>(particles, grid, gridOrigin);
 
         // advect by gravity
+		float stepSize = simulationTimestep.count() / 1000.0f;
         for (auto& gridVelocity : gridVelocities.IterateCells()) {
-            gridVelocity[1] -= 9.80665 * simulationTimestep.count() / 1000.0;
+			gridVelocity[1] -= 9.80665f * stepSize;
         }
 
         // Transfer back to particles
@@ -234,8 +256,16 @@ int main(int argc, char** argv) {
         // Update positions
         auto& particleVelocities = particles.GetAttributeList<SimulationAttribute::Velocity>();
         for (unsigned int p = 0; p < particles.Size(); ++p) {
-            particlePositions[p] += particleVelocities[p] * simulationTimestep.count() / 1000.0;
+			particlePositions[p] += particleVelocities[p] * stepSize;
         }
+
+		// Update grid weights
+		int pw = 0;
+		for (auto& particleWeights : particles.GetAttributeList<SimulationAttribute::Weights>()) {
+			particleWeights.fill_Weights(particlePositions[pw],
+				grid.CellSize(), velo_Grid);
+			pw += 1;
+		}
 
         auto end = std::chrono::system_clock::now();
         auto elapsed = end - start;
