@@ -12,11 +12,11 @@ struct AttributeTransfer {
 
 	public:
 		static constexpr unsigned int kLen = 3 * Dimension;
-		Eigen::Array<Eigen::Vector3f, kLen, 1> N;
+		Eigen::Array<float, kLen, 1> N;
 		Eigen::Array<Eigen::Vector3f, kLen, 1> N_deriv;
 
 		WeightVals() :
-			N(Eigen::Array<Eigen::Vector3f, kLen, 1>()),
+			N(Eigen::Array<float, kLen, 1>()),
 			N_deriv(Eigen::Array<Eigen::Vector3f, kLen, 1>()) {}
 
 		// N: used for wip
@@ -48,10 +48,10 @@ struct AttributeTransfer {
 			float second = 0.5f * pow((1.5f - abs(x)), 2);
 			return (x >= 0.0f && x > 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
 		}
-		static Eigen::Array<T, Dimension, 1> basisFunction_V(Eigen::Array<T, Dimension, 1> v) {
-			Eigen::Array<T, Dimension, 1> returning = Eigen::Array<T, Dimension, 1>();
+		static float basisFunction_V(Eigen::Array<T, Dimension, 1> v) {
+			float returning = 1.f;
 			for (int i = 0; i < Dimension; i++) {
-				returning[i] = basisFunction(v[i]);
+				returning *= basisFunction(v[i]);
 			}
 			return returning;
 		}
@@ -71,7 +71,7 @@ struct AttributeTransfer {
 		}
 
 		// N for particle grid location
-		static Eigen::Array<T, Dimension, 1> calcN(Eigen::Array<T, Dimension, 1> xp, Eigen::Array<T, Dimension, 1> xi, float cellSize) {
+		static float calcN(Eigen::Array<T, Dimension, 1> xp, Eigen::Array<T, Dimension, 1> xi, float cellSize) {
 			return basisFunction_V((xp - xi) / cellSize);
 		}
 
@@ -80,7 +80,8 @@ struct AttributeTransfer {
 			return derivOfBasisFunction_V((xp - xi) / cellSize);
 		} 
 
-		static Eigen::Array<T, Dimension, 1> indexN(Eigen::Array<T, Dimension, 1> xp, Eigen::Array<T, Dimension, 1> xi, float cellSize) {
+		// indexing helper
+		static Eigen::Array<T, Dimension, 1> indexInto(Eigen::Array<T, Dimension, 1> xp, Eigen::Array<T, Dimension, 1> xi, float cellSize) {
 			Eigen::Array<T, Dimension, 1> fixedParam = ((xp - xi) / cellSize);
 			Eigen::Array<T, Dimension, 1> index = Eigen::Array<T, Dimension, 1>();
 			index.fill(0.f);
@@ -104,35 +105,6 @@ struct AttributeTransfer {
 			return index;
 		}
 
-		static Eigen::Array<T, Dimension, 2> indexN_deriv(Eigen::Array<T, Dimension, 1> xp, Eigen::Array<T, Dimension, 1> xi, float cellSize) {
-			Eigen::Array<T, Dimension, 1> fixedParam = ((xp - xi) / cellSize);
-			Eigen::Array<T, Dimension, 2> indexRange = Eigen::Array<T, Dimension, 2>();
-			indexRange.fill(0.f);
-
-			for (int i = 0; i < Dimension; i++) {
-
-				float val = fixedParam[i];
-				float aVal = abs(fixedParam[i]);
-				if (val > 2 || val < -1) {
-					// outside of checking region
-					throw;
-				}
-
-				//if (i == 0) {
-				//	// x val has 3 components all others have 2
-				//	loc[i][0] = (aVal > 1) ? 0 : 1;
-				//	loc[i][1] = (aVal > 1) ? 1 : 2;
-				//}
-				//else {
-				//	float offset = (i - 1) * 2 + 3;
-				//	loc[i][0] = (aVal > 1) ? offset : ;/// rewrite everything base 3
-				//	loc[i][0] = (aVal > 1) ? offset : offset + 1;
-				//} TODOOOOOO
-			}
-
-			return index;
-		}
-
 	public:
 
 		// calc N and N' values for curr particle positions
@@ -147,7 +119,7 @@ struct AttributeTransfer {
 			for (unsigned int i = 0; i < kLen; i++) {
 				Eigen::Array<T, Dimension, 1> loc = intCast;
 
-				int index = i / 3 + i % 3;
+				int index = i / 3;
 				loc[index] += -1.f * cellSize + (i % 3) * cellSize;
 
 				auto Nval = calcN(xp, loc, cellSize);
@@ -159,11 +131,10 @@ struct AttributeTransfer {
 		}
 
 		// calculating Wip with reference to a specific cell xi
-		Eigen::Array<T, Dimension, 1> calcWip(Eigen::Array<T, Dimension, 1> xp, Eigen::Array<T, Dimension, 1> xi, float cellSize) {
-			Eigen::Array<T, Dimension, 1> index = indexN(xp, xi, cellSize);
+		float calcWip(Eigen::Array<T, Dimension, 1> xp, Eigen::Array<T, Dimension, 1> xi, float cellSize) {
+			Eigen::Array<T, Dimension, 1> index = indexInto(xp, xi, cellSize);
 
-			Eigen::Array<T, Dimension, 1>  calc = Eigen::Array<T, Dimension, Dimension>();
-			calc.fill(1.f);
+			float calc = 1.f;
 
 			for (int i = 0; i < Dimension; i++) {
 				calc *= N[index[i]];
@@ -173,14 +144,20 @@ struct AttributeTransfer {
 		}
 
 		// calculating gradWip with reference to a specific cell xi
-		Eigen::Array<T, Dimension, 1> calcGradWip(Eigen::Array<T, Dimension, 1> xp, float cellSize) {
-			Eigen::Array<T, Dimension, 1> index = indexN(xp, xi, cellSize);
+		Eigen::Array<T, Dimension, Dimension> calcGradWip(Eigen::Array<T, Dimension, 1> xp, float cellSize) {
+			Eigen::Array<T, Dimension, 1> index = indexInto(xp, xi, cellSize);
 
-			Eigen::Array<T, Dimension, 1>  calc = Eigen::Array<T, Dimension, 1>();
-			calc.fill(1.f); //---------------------------TODOTODOTODOTODOTODO
+			Eigen::Array<T, Dimension, Dimension>  calc = Eigen::Array<T, Dimension, Dimension>();
+			calc.fill(1.f);
 
 			for (int i = 0; i < Dimension; i++) {
-				calc[i] = (funcOrDeriv) ? N[index[i]] : N_deriv[index[i]];
+				int min = index[i];
+				if (min % 3 == 2) {
+					min += 1;
+				}
+				int max = min + 1;
+
+				calc[i] = N_deriv[min] * N_deriv[max] / cellSize;
 			}
 
 			return calc;
