@@ -12,15 +12,15 @@ struct AttributeTransfer {
 
 	public:
 		static constexpr unsigned int kLen = 3 + (Dimension - 1) * 2;
-		Eigen::Array<float, kLen, 1> w;
-		Eigen::Array<Eigen::Vector3f, kLen, 1> w_deriv;
+		Eigen::Array<Eigen::Vector3f, kLen, 1> N;
+		Eigen::Array<Eigen::Vector3f, kLen, 1> N_deriv;
 
 		WeightVals() :
-			w(Eigen::Array<float, kLen, 1>()),
-			w_deriv(Eigen::Array<Eigen::Vector3f, kLen, 1>()) {}
+			N(Eigen::Array<Eigen::Vector3f, kLen, 1>()),
+			N_deriv(Eigen::Array<Eigen::Vector3f, kLen, 1>()) {}
 
-		// first col = wip
-		// second col = gradWip
+		// N: used for wip
+		// N': used for gradWip
 
 		// loc template
 		//     Y -Z
@@ -28,17 +28,17 @@ struct AttributeTransfer {
 		//  Z -Y
 
 		// N:
-		//   D G
+		//   E F
 		// A B C
-		// F E
+		// G D
 		// N':
-		//   K M
+		//   L M
 		// H I J
-		// N L
+		// N K
 
 		// ordering in 2d array
-		// ABC DE FG -- w
-		// HIJ KL MN -- w_deriv
+		// ABC DE FG -- for w
+		// HIJ KL MN -- for w_deriv
 
 	private:
 
@@ -48,7 +48,7 @@ struct AttributeTransfer {
 			float second = 0.5f * pow((1.5f - abs(x)), 2);
 			return (x >= 0.0f && x > 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
 		}
-		static Eigen::Vector3f basisFunction(Eigen::Vector3f v) {
+		static Eigen::Vector3f basisFunction_V(Eigen::Vector3f v) {
 			return Eigen::Vector3f(basisFunction(v[0]), basisFunction(v[1]), basisFunction(v[2]));
 		}
 
@@ -58,61 +58,107 @@ struct AttributeTransfer {
 			auto second = -1.5f + abs(x);
 			return (x >= 0.0f && x > 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
 		}
-		static Eigen::Vector3f derivOfBasisFunction(Eigen::Vector3f v) {
+		static Eigen::Vector3f derivOfBasisFunction_V(Eigen::Vector3f v) {
 			return Eigen::Vector3f(derivOfBasisFunction(v[0]), derivOfBasisFunction(v[1]), derivOfBasisFunction(v[2]));
 		}
 
-		// wip for a particle to a specific grid location
-		static float calcWIP(Eigen::Vector3f xp, Eigen::Vector3f xi, float cellSize) {
-			Eigen::Vector3f wip = basisFunction((xp - xi) / cellSize);
-			return wip[0] * wip[1] * wip[2];
+		// N for particle grid location
+		static Eigen::Vector3f calcN(Eigen::Vector3f xp, Eigen::Vector3f xi, float cellSize) {
+			return basisFunction_V((xp - xi) / cellSize);
 		}
 
-		// grad wip 
-		static Eigen::Vector3f calcGradWIP(Eigen::Vector3f xp, Eigen::Vector3f xi, float cellSize) {
-			float inv_cSize = 1.0f / cellSize;
-			auto basisVals = basisFunction(inv_cSize * (xp - xi));
-			auto derivBasisVals = derivOfBasisFunction(inv_cSize * (xp - xi));
+		// N' for particle to grid location
+		static Eigen::Vector3f calcN_deriv_V(Eigen::Vector3f xp, Eigen::Vector3f xi, float cellSize) {
+			return derivOfBasisFunction_V((xp - xi) / cellSize);
+		} 
 
-			return Eigen::Vector3f(inv_cSize * derivBasisVals[0] * basisVals[1] * basisVals[2],
-				inv_cSize * basisVals[0] * derivBasisVals[1] * basisVals[2],
-				inv_cSize * basisVals[0] * basisVals[1] * derivBasisVals[2]);
+		static Eigen::Vector3i indexN(Eigen::Vector3f xp, Eigen::Vector3f xi, float cellSize) {
+			if (i < 3) {
+				loc[0] += static_cast<float>(-cellSize + i * cellSize);
+			}
+			else {
+				// index for arb sized grid
+				int index = (i - 3) / 2 + 1;
+				loc[index] += ((i + 1) % 2 == 0) ? -cellSize : cellSize;
+			}
+
+			Eigen::Vector3f fixedParam = ((xp - xi) / cellSize);
+			Eigen::Vector3i index = Eigen::Vector3i(0, 0, 0);
+			for (int i = 0; i < fixedParam.size(); i++) {
+
+				float val = fixedParam[i];
+				float aVal = abs(fixedParam[i]);
+				if (val > 2 || val < -1) {
+					// outside of checking region
+					return -1;
+				}
+
+				if (i == 0) {
+					// x val has 3 components all others have 2
+					loc[i] = (aVal > 1) ? 0 : ((val >= 0) ? 1 : 2) ;
+				}
+				else {
+					float offset = (i - 1) * 2 + 3;
+					loc[i] = (aVal > 1) ? offset : offset + 1;
+				}
+			}
+
+			return index;
 		}
 
 	public:
-		template <typename AttributeGrid>
-		//NEED TO RE-ADD IN GRID CHECK HERE -------------------------------------------------------------------------
-		void fill_Weights(Eigen::Vector3f xp, float cellSize, AttributeGrid &attributeGrid) {
 
-			auto& sourceGrid = attributeGrid;
+		// calc weights for curr particle positions
+		void fill_Weights(Eigen::Vector3f xp, float cellSize) {
+
 			auto intCast = Eigen::Vector3f(floor(xp[0]),
 				floor(xp[1]),
 				floor(xp[2]));
 
 			// calc weights for grid positions being checked
 			for (unsigned int i = 0; i < kLen; i++) {
-				Eigen::Vector3f loc = (i < 3) ? Eigen::Vector3f(intCast[0] - 1 + i, intCast[1], intCast[2])
-					: ((i < 5) ? Eigen::Vector3f(intCast[0], intCast[1] + ((i == 3) ? -1 : 1), intCast[2])
-						: Eigen::Vector3f(intCast[0], intCast[1], intCast[2] + ((i == 5) ? -1 : 1)
-						));
-				auto wip = calcWIP(xp, loc, cellSize);
-				Eigen::Vector3f gradwip = calcGradWIP(xp, loc, cellSize);
+				Eigen::Vector3f loc = Eigen::Vector3f(intCast[0], intCast[1], intCast[2]);
 
-				// existing loc in grid then want to have valid weight otherwise 0
-				auto index = Eigen::Array<unsigned int, kDimension, 1>();
-				for (int j = 0; j < 3; j++) {
-					index[j] = static_cast<unsigned int>(loc[j]);
+				if (i < 3) {
+					loc[0] += static_cast<float>(-cellSize + i * cellSize);
+				} else {
+					// index for arb sized grid
+					int index = (i - 3) / 2 + 1;
+					loc[index] += ((i + 1) % 2 == 0) ? -cellSize : cellSize;
 				}
-				auto* checkLoc = sourceGrid.at(index);
-				if (checkLoc) {
-					w[i] = wip;
-					w_deriv[i] = gradwip;
-				}
-				else {
-					w[i] = 0.f;
-					w_deriv[i] = Eigen::Vector3f(0.f, 0.f, 0.f);
-				}
+
+				auto Nval = calcN(xp, loc, cellSize);
+				Eigen::Vector3f N_derivVal = calcN_deriv_V(xp, loc, cellSize);
+
+				N[i] = Nval;
+				N_deriv[i] = N_derivVal;
 			}
+		}
+
+		// calculating Wip with reference to a specific cell xi
+		Eigen::Vector3f calcWip(Eigen::Vector3f xp, Eigen::Vector3f xi, float cellSize) {
+			Eigen::Vector3i index = indexN(xp, xi, cellSize);
+
+			Eigen::Vector3f calc = Eigen::Vector3f(1.f, 1.f, 1.f);
+
+			for (int i = 0; i < index.size(); i++) {
+				calc *= N[index[i]];
+			}
+
+			return calc;
+		}
+
+		// calculating gradWip with reference to a specific cell xi
+		Eigen::Vector3f calcGradWip(Eigen::Vector3f xp, float cellSize) {
+			Eigen::Vector3i index = indexN(xp, xi, cellSize);
+
+			Eigen::Vector3f calc = Eigen::Vector3f(1.f, 1.f, 1.f);
+
+			for (int i = 0; i < index.size(); i++) {
+				calc *= N_deriv[index[i]];
+			}
+
+			return calc;
 		}
 	};
 

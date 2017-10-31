@@ -218,8 +218,7 @@ int main(int argc, char** argv) {
 	int pw = 0;
 	for (auto& particleWeights : particles.GetAttributeList<SimulationAttribute::Weights>()) {
 		particleWeights.fill_Weights(particlePositions[pw],
-									grid.CellSize(),
-									velo_Grid);
+									grid.CellSize() );
 		// passing in velocity (instead of position) just so have sthg to check against for valid
 		// loc in grid
 		pw += 1;
@@ -263,7 +262,7 @@ int main(int argc, char** argv) {
 		int pw = 0;
 		for (auto& particleWeights : particles.GetAttributeList<SimulationAttribute::Weights>()) {
 			particleWeights.fill_Weights(particlePositions[pw],
-				grid.CellSize(), velo_Grid);
+				grid.CellSize() );
 			pw += 1;
 		}
 
