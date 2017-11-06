@@ -44,58 +44,6 @@ namespace simulation {
 
 		private:
 
-			// the function N used to define wip and grad wip for 
-			float basisFunction(float x) {
-				// linear
-				float first = 1 - fabs(x);
-				float second = 0;
-
-				return (x >= 0 && x < 1) ? first : second;
-				
-				
-				/*
-				// quadratic
-				float first = 0.75f - pow(abs(x), 2.f);
-				float second = 0.5f * pow((1.5f - abs(x)), 2.f);
-
-				return (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5f && x < 1.5f) ? second : 0);
-				*/
-				
-			}
-			void basisFunction_V(int i, int j, Eigen::Array<T, Dimension, 1> v) {
-
-				//------- why looping here but filling in N(i,j) value with next iteration in each loop???? ----------
-				// resolved since outer loop already does this
-				//for (int d = 0; d < Dimension; ++d) {
-					N(i,j) = basisFunction(v[d]);
-				//}
-			}
-
-			// N' 
-			float derivOfBasisFunction(float x) {
-
-				// linear
-
-				float first = -fabs(x);
-				float second = 0;
-
-				return (x >= 0 && x < 1) ? first : second;
-
-				
-				/*
-				//quadratic 
-				auto first = -2.0f * abs(x);
-				auto second = -1.5f + abs(x);
-				return (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
-				*/
-				
-			}
-			void derivOfBasisFunction_V(int i, int j, Eigen::Array<T, Dimension, 1> v) {
-				for (int d = 0; d < Dimension; ++d) {
-					N_deriv(i,j) = derivOfBasisFunction(v[d]);
-				}
-			}
-
 			// checks if inputted grid value [whose components should now range from -1 to 2] are proper
 			static bool withinTest(Eigen::Array<T, Dimension, 1> v) {
 				
@@ -112,19 +60,40 @@ namespace simulation {
 			}
 
 			// N for particle grid location
-			void calcN(int i, int j, Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) {
-				Eigen::Array<float, Dimension, 1> scaled = (xp_modif - xi_modif) / cellSize;
-				withinTest(scaled);
+			void calcN(int i, int j, float x) {
+				/*
+				// linear
+				float first = 1 - fabs(x);
+				float second = 0;
+
+				N(i, j) = (x >= 0 && x < 1) ? first : second;
+				*/
 				
-				basisFunction_V(i, j, scaled);
+				// quadratic
+				float first = 0.75f - pow(abs(x), 2.f);
+				float second = 0.5f * pow((1.5f - abs(x)), 2.f);
+
+				N(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5f && x < 1.5f) ? second : 0);
+				
 			}
 
 			// N' for particle to grid location
-			void calcN_deriv(int i, int j, Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) {
-				Eigen::Array<float, Dimension, 1> scaled = (xp_modif - xi_modif) / cellSize;
-				withinTest(scaled);
+			void calcN_deriv(int i, int j, float x) {
+				/*
+				// linear
 
-				derivOfBasisFunction_V(i, j, scaled);
+				float first = -fabs(x);
+				float second = 0;
+
+				N_deriv(i, j) = (x >= 0 && x < 1) ? first : second;
+				*/
+				
+				//quadratic
+				auto first = -2.0f * abs(x);
+				auto second = -1.5f + abs(x);
+
+				N_deriv(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
+				
 			}
 
 			static bool floatEquals(float a, float b) {
@@ -169,7 +138,7 @@ namespace simulation {
 				// here xp, xi are orig values (no modifications)
 
 				// location of lower left hand node [ie if grid system is of cellSize 1, and point p is at 2,2 then 
-				// this node at 0, 0
+				// this node at 0, 0]
 				auto pLoc = particleLoc(xp, origin);
 				auto baseNode = baseNodeLoc(xp, origin, cellSize);
 
@@ -177,15 +146,16 @@ namespace simulation {
 				for (int i = 0; i < Dimension; ++i) {
 
 					// iterating temp location on grid nodes
-					auto temp = baseNode; 
+					auto tempGridLoc = baseNode; 
 					for (int j = 0; j < 3; ++j) {
-						//-------------------------------------------------------------------------------------------------------
-						// improper use of the i's and j's
-						temp[i] = baseNode[i] + j * cellSize;
 
-						/// ---- should do pLoc[i] and temploc[i] as inputs for ploc and temp and leave same vals of i and j???????????
-						calcN(i, j, pLoc, temp, cellSize);
-						calcN_deriv(i, j, pLoc, temp, cellSize);
+						tempGridLoc[i] = baseNode[i] + j * cellSize;
+
+						Eigen::Array<T, Dimension, 1> scaled = (pLoc - tempGridLoc) / cellSize;
+						withinTest(scaled);
+
+						calcN(i, j, scaled[i]);
+						calcN_deriv(i, j, scaled[i]);
 					}
 				}
 
