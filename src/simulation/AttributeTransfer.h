@@ -46,10 +46,20 @@ namespace simulation {
 
 			// the function N used to define wip and grad wip for 
 			float basisFunction(float x) {
+				// linear
+				float first = 1 - fabs(x);
+				float second = 0;
+
+				return (x >= 0 && x < 1) ? first : second;
+				
+				/*
+
+				// quadratic
 				float first = 0.75f - pow(abs(x), 2.f);
 				float second = 0.5f * pow((1.5f - abs(x)), 2.f);
 
-				return (x >= 0.0f && x <= 1.5f) ? first : ((x >= 0.5 && x <= 1.5f) ? second : 0);
+				return (x >= 0.0f && x < 1.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
+				*/
 			}
 			void basisFunction_V(int i, int j, Eigen::Array<T, Dimension, 1> v) {
 				for (int d = 0; d < Dimension; ++d) {
@@ -59,9 +69,21 @@ namespace simulation {
 
 			// N' 
 			float derivOfBasisFunction(float x) {
+
+				// linear
+
+				float first = -fabs(x);
+				float second = 0;
+
+				return (x >= 0 && x < 1) ? first : second;
+
+				/* 
+
+				//quadratic 
 				auto first = -2.0f * abs(x);
 				auto second = -1.5f + abs(x);
-				return (x >= 0.0f && x <= 1.5f) ? first : ((x >= 0.5 && x <= 1.5f) ? second : 0);
+				return (x >= 0.0f && x < 1.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
+				*/
 			}
 			void derivOfBasisFunction_V(int i, int j, Eigen::Array<T, Dimension, 1> v) {
 				for (int d = 0; d < Dimension; ++d) {
@@ -114,7 +136,7 @@ namespace simulation {
 
 				withinTest(scaled);
 
-				for (int i = 0; i < Dimension; i++) {
+				for (int i = 0; i < Dimension; ++i) {
 					float val = scaled[i];
 
 					index[i] = (val > 0.f || floatEquals(val, 0.f)) ? ((val > 1.f || floatEquals(val, 1.f) ) ? 0 : 1) : 2;
@@ -130,9 +152,11 @@ namespace simulation {
 			}
 
 			static Eigen::Array<T, Dimension, 1> baseNodeLoc(Eigen::Array < T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin, float cellSize) {
-				Eigen::Array<float, Dimension, 1> fill_cellSize = Eigen::Array<float, Dimension, 1>();
-				fill_cellSize.fill(cellSize);
-				return (xp - origin) - fill_cellSize;
+				Eigen::Array<float, Dimension, 1> base = Eigen::Array<float, Dimension, 1>();
+				for (int d = 0; d < Dimension; ++d) {
+					base[d] = floor((xp[d] - origin[d]) / cellSize) - 1.f;
+				}
+				return base * cellSize;
 			}
 
 			// calc N and N' values for curr particle positions
@@ -168,6 +192,7 @@ namespace simulation {
 				// calc weights for grid positions being checked
 				float val = 1.f;
 				for (int i = 0; i < Dimension; ++i) {
+					float temp = N(i, index[i]);
 					val *= N(i, index[i]);
 				}
 
@@ -226,7 +251,7 @@ namespace simulation {
 			//int cellSize_int = static_cast<unsigned int>(attributeGrid.CellSize());
 			auto cellSize = attributeGrid.CellSize();
 
-			for (unsigned int p = 0; p < particleSet.Size(); p++) {
+			for (unsigned int p = 0; p < particleSet.Size(); ++p) {
 				auto& key = keyAttributes[p];
 				auto& sourceVal = sourceAttributes[p];
 				auto weights = weightAttributes[p];
@@ -244,20 +269,28 @@ namespace simulation {
 				sumGradWeights.fill(0.f);
 
 				// THIS PART MANUALLY CODED FOR 3 DIMENSIONS
-				for (unsigned int i = 0; i < 3; i++) {
+				Eigen::Array<float, Dimension, 1> testWeightVal = Eigen::Array<float, Dimension, 1>();
+				for (unsigned int i = 0; i < 3; ++i) {
 					gridLoc[0] = baseNodeLoc[0] + i * cellSize;
-					for (unsigned int j = 0; j < 3; j++) {
+					for (unsigned int j = 0; j < 3; ++j) {
 						gridLoc[1] = baseNodeLoc[1] + j * cellSize;
-						for (unsigned int k = 0; k < 3; k++) {
+						for (unsigned int k = 0; k < 3; ++k) {
 							gridLoc[2] = baseNodeLoc[2] + k * cellSize;
-
+							
 							auto weightVal_calc = weights.calcWip(pLoc, gridLoc, cellSize);
 							Eigen::Array<T, Dimension, 1> sourceVal_weighted = sourceVal * weightVal_calc;
 
 							sumGradWeights += weightVal_calc;
 							if (p == 0) {
-								std::cout << "P2G gridVal_w: weights num: " << (i*k*j + k*j + k) << " =" << weightVal_calc << std::endl;
+								//std::cout << "grid loc: " << gridLoc[0] << "," << gridLoc[1] << "," << gridLoc[2] << std::endl;
+								//std::cout<< "       pos loc: " << pLoc[0] << "," << pLoc[1] << "," << pLoc[2] << std::endl;
+							//	std::cout << "P2G gridVal_w: weights num: " << (i*k*j + k*j + k) << " =" << weightVal_calc << std::endl;
 							}
+
+							if (p == 0 && i == 0 && j == 0 && k == 0) {
+								//std::cout << "weightVal_cal: " << weightVal_calc<< std::endl;
+							}
+
 
 							Eigen::Array<unsigned int, Dimension, 1> checkLoc = (gridLoc / cellSize).cast<unsigned int>();
 							auto* gridAttributeAtLoc = targetGrid.at(checkLoc);
@@ -271,6 +304,7 @@ namespace simulation {
 
 				if (p == 0) {
 					std::cout << "sumGradWeights: " << sumGradWeights << std::endl;
+				//	std::cout<< "       pos loc: " << pLoc[0] << "," << pLoc[1] << "," << pLoc[2] << std::endl;
 				}
 
 			} // end: looping through each particle
@@ -305,7 +339,7 @@ namespace simulation {
 			//int cellSize_int = static_cast<unsigned int>(attributeGrid.CellSize());
 			auto cellSize = attributeGrid.CellSize();
 
-			for (unsigned int p = 0; p < particleSet.Size(); p++) {
+			for (unsigned int p = 0; p < particleSet.Size(); ++p) {
 				auto& key = keyAttributes[p];
 				auto weights = weightAttributes[p];
 
@@ -322,11 +356,11 @@ namespace simulation {
 				gridVal_weighted.fill(0.f);
 
 				// THIS PART MANUALLY CODED FOR 3 DIMENSIONS
-				for (unsigned int i = 0; i < 3; i++) {
+				for (unsigned int i = 0; i < 3; ++i) {
 					gridLoc[0] = baseNodeLoc[0] + i * cellSize;
-					for (unsigned int j = 0; j < 3; j++) {
+					for (unsigned int j = 0; j < 3; ++j) {
 						gridLoc[1] = baseNodeLoc[1] + j * cellSize;
-						for (unsigned int k = 0; k < 3; k++) {
+						for (unsigned int k = 0; k < 3; ++k) {
 							gridLoc[2] = baseNodeLoc[2] + k * cellSize;
 
 							Eigen::Array<unsigned int, Dimension, 1> checkLoc = (gridLoc / cellSize).cast<unsigned int>();
