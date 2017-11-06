@@ -52,19 +52,23 @@ namespace simulation {
 
 				return (x >= 0 && x < 1) ? first : second;
 				
+				
 				/*
-
 				// quadratic
 				float first = 0.75f - pow(abs(x), 2.f);
 				float second = 0.5f * pow((1.5f - abs(x)), 2.f);
 
-				return (x >= 0.0f && x < 1.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
+				return (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5f && x < 1.5f) ? second : 0);
 				*/
+				
 			}
 			void basisFunction_V(int i, int j, Eigen::Array<T, Dimension, 1> v) {
-				for (int d = 0; d < Dimension; ++d) {
+
+				//------- why looping here but filling in N(i,j) value with next iteration in each loop???? ----------
+				// resolved since outer loop already does this
+				//for (int d = 0; d < Dimension; ++d) {
 					N(i,j) = basisFunction(v[d]);
-				}
+				//}
 			}
 
 			// N' 
@@ -77,13 +81,14 @@ namespace simulation {
 
 				return (x >= 0 && x < 1) ? first : second;
 
-				/* 
-
+				
+				/*
 				//quadratic 
 				auto first = -2.0f * abs(x);
 				auto second = -1.5f + abs(x);
-				return (x >= 0.0f && x < 1.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
+				return (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
 				*/
+				
 			}
 			void derivOfBasisFunction_V(int i, int j, Eigen::Array<T, Dimension, 1> v) {
 				for (int d = 0; d < Dimension; ++d) {
@@ -172,10 +177,13 @@ namespace simulation {
 				for (int i = 0; i < Dimension; ++i) {
 
 					// iterating temp location on grid nodes
-					auto temp = baseNode;
+					auto temp = baseNode; 
 					for (int j = 0; j < 3; ++j) {
-						temp[i] += j * cellSize;
+						//-------------------------------------------------------------------------------------------------------
+						// improper use of the i's and j's
+						temp[i] = baseNode[i] + j * cellSize;
 
+						/// ---- should do pLoc[i] and temploc[i] as inputs for ploc and temp and leave same vals of i and j???????????
 						calcN(i, j, pLoc, temp, cellSize);
 						calcN_deriv(i, j, pLoc, temp, cellSize);
 					}
@@ -284,7 +292,7 @@ namespace simulation {
 							if (p == 0) {
 								//std::cout << "grid loc: " << gridLoc[0] << "," << gridLoc[1] << "," << gridLoc[2] << std::endl;
 								//std::cout<< "       pos loc: " << pLoc[0] << "," << pLoc[1] << "," << pLoc[2] << std::endl;
-							//	std::cout << "P2G gridVal_w: weights num: " << (i*k*j + k*j + k) << " =" << weightVal_calc << std::endl;
+								std::cout << "P2G gridVal_w: weights num: " << (i*k*j + k*j + k) << " =" << weightVal_calc << std::endl;
 							}
 
 							if (p == 0 && i == 0 && j == 0 && k == 0) {
