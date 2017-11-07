@@ -217,10 +217,9 @@ int main(int argc, char** argv) {
 	auto& velo_Grid = grid.GetGrid<SimulationAttribute::Velocity>();
 	int pw = 0;
 	for (auto& particleWeights : particles.GetAttributeList<SimulationAttribute::Weights>()) {
-		particleWeights.fill_Weights(particlePositions[pw],
-									grid.CellSize() );
-		// passing in velocity (instead of position) just so have sthg to check against for valid
-		// loc in grid
+		particleWeights.fillWeights(particlePositions[pw],
+									grid.CellSize(),
+									gridOrigin);
 		pw += 1;
 	}
 
@@ -236,9 +235,9 @@ int main(int argc, char** argv) {
 
         auto& gridVelocities = grid.GetGrid<SimulationAttribute::Velocity>();
 
-        // Clear grid velocities
+        // Clear grid velocities - basically like doing the mivi / mi if a grid node has mass associated with it
         for (auto& gridVelocity : gridVelocities.IterateCells()) {
-            gridVelocity = { 0, 0, 0 };
+            gridVelocity = {0, 0, 0};
         }
 
         AttributeTransfer::ParticleToGrid<SimulationAttribute::Velocity>(particles, grid, gridOrigin);
@@ -261,8 +260,9 @@ int main(int argc, char** argv) {
 		// Update grid weights
 		int pw = 0;
 		for (auto& particleWeights : particles.GetAttributeList<SimulationAttribute::Weights>()) {
-			particleWeights.fill_Weights(particlePositions[pw],
-				grid.CellSize() );
+			particleWeights.fillWeights(particlePositions[pw],
+				grid.CellSize(),
+				gridOrigin);
 			pw += 1;
 		}
 
