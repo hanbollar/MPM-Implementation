@@ -13,7 +13,6 @@ namespace simulation {
 		class WeightVals {
 
 		public:
-			static constexpr unsigned int kLen = 3 * Dimension;
 			Eigen::Array<float, Dimension, 3> N;
 			Eigen::Array<float, Dimension, 3> N_deriv;
 
@@ -38,9 +37,13 @@ namespace simulation {
 			// J K L   N	 Q
 			//		   M	R
 
-			// ordering in 2d array
-			// ABC DEF GHI -- for N
-			// JKL MNO PQR -- for N_deriv
+			// ordering in array
+			// ABC
+			// DEF
+			// GHI -- for N
+			// JKL
+			// MNO
+			// PQR -- for N_deriv
 
 		private:
 
@@ -53,14 +56,16 @@ namespace simulation {
 					bool valid = (val < 2 || floatEquals(val, 2)) && (val > -2 || floatEquals(val, -2));
 					if (!valid) {
 						// outside of checking region
-						std::cout << "ERROR: givin improper indexing location for weights array" << std::endl;
 						throw;
 					}
 				}
 			}
 
 			// N for particle grid location
-			void calcN(int i, int j, float x) {
+			void calcN(int i, int j, float component) {
+
+				float x = abs(component);
+
 				/*
 				// linear
 				float first = 1 - fabs(x);
@@ -68,17 +73,20 @@ namespace simulation {
 
 				N(i, j) = (x >= 0 && x < 1) ? first : second;
 				*/
-				
+
 				// quadratic
-				float first = 0.75f - pow(abs(x), 2.f);
-				float second = 0.5f * pow((1.5f - abs(x)), 2.f);
+				float first = 0.75f - pow(x, 2.f);
+				float second = 0.5f * pow((1.5f - x), 2.f);
 
 				N(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5f && x < 1.5f) ? second : 0);
 				
 			}
 
 			// N' for particle to grid location
-			void calcN_deriv(int i, int j, float x) {
+			void calcN_deriv(int i, int j, float component) {
+
+				float x = abs(component);
+				
 				/*
 				// linear
 
@@ -89,16 +97,11 @@ namespace simulation {
 				*/
 				
 				//quadratic
-				auto first = -2.0f * abs(x);
-				auto second = -1.5f + abs(x);
+				auto first = -2.0f * x;
+				auto second = -1.5f + x;
 
 				N_deriv(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
 				
-			}
-
-			static bool floatEquals(float a, float b) {
-				float epsilon = 0.000005f;
-				return (fabs(a - b) < epsilon);
 			}
 
 			// indexing helper to get N or N' value from appropriate arrays
@@ -120,6 +123,11 @@ namespace simulation {
 			}
 
 		public:
+
+			static bool floatEquals(float a, float b) {
+				float epsilon = 0.000005f;
+				return (fabs(a - b) < epsilon);
+			}
 
 			static Eigen::Array<T, Dimension, 1> particleLoc(Eigen::Array<T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin) {
 				return xp - origin;
@@ -205,22 +213,7 @@ namespace simulation {
 		// P2G
 		template <Attribute A, typename ParticleSet, typename AttributeGrid>
 		static void ParticleToGrid(const ParticleSet &particleSet, AttributeGrid &attributeGrid, const Eigen::Array<T, Dimension, 1> &origin) {
-			
-			/*
-			const auto& keyAttributes = particleSet.GetAttributeList<Key>();
-			const auto& sourceAttributes = particleSet.GetAttributeList<A>();
-			auto& targetGrid = attributeGrid.GetGrid<A>();
 
-			for (unsigned int p = 0; p < particleSet.Size(); ++p) {
-				const auto& key = keyAttributes[p];
-				Eigen::Array<unsigned int, Dimension, 1> ll = ((key - origin) / attributeGrid.CellSize()).cast<unsigned int>();
-				auto* gridAttributell = targetGrid.at(ll);
-				if (gridAttributell) {
-					*gridAttributell = sourceAttributes[p];
-				}
-			}*/
-			
-			
 			const auto& keyAttributes = particleSet.GetAttributeList<Key>(); // pos
 			const auto& sourceAttributes = particleSet.GetAttributeList<A>(); // attribute
 			const auto& weightAttributes = particleSet.GetAttributeList<SimulationAttribute::Weights>();
@@ -243,8 +236,7 @@ namespace simulation {
 				Eigen::Array<float, Dimension, 1> gridLoc = Eigen::Array<float, Dimension, 1>();
 				gridLoc.fill(0.f);
 
-				auto sumGradWeights = Eigen::Array<float, Dimension, 1>();
-				sumGradWeights.fill(0.f);
+				float sumWeights = 0.f;
 
 				// THIS PART MANUALLY CODED FOR 3 DIMENSIONS
 				Eigen::Array<float, Dimension, 1> testWeightVal = Eigen::Array<float, Dimension, 1>();
@@ -258,17 +250,7 @@ namespace simulation {
 							auto weightVal_calc = weights.calcWip(pLoc, gridLoc, cellSize);
 							Eigen::Array<T, Dimension, 1> sourceVal_weighted = sourceVal * weightVal_calc;
 
-							sumGradWeights += weightVal_calc;
-							if (p == 0) {
-								//std::cout << "grid loc: " << gridLoc[0] << "," << gridLoc[1] << "," << gridLoc[2] << std::endl;
-								//std::cout<< "       pos loc: " << pLoc[0] << "," << pLoc[1] << "," << pLoc[2] << std::endl;
-								std::cout << "P2G gridVal_w: weights num: " << (i*k*j + k*j + k) << " =" << weightVal_calc << std::endl;
-							}
-
-							if (p == 0 && i == 0 && j == 0 && k == 0) {
-								//std::cout << "weightVal_cal: " << weightVal_calc<< std::endl;
-							}
-
+							sumWeights += weightVal_calc;
 
 							Eigen::Array<unsigned int, Dimension, 1> checkLoc = (gridLoc / cellSize).cast<unsigned int>();
 							auto* gridAttributeAtLoc = targetGrid.at(checkLoc);
@@ -280,34 +262,17 @@ namespace simulation {
 					}
 				} // end: looping through all three dimensions for interpolating grid value
 
-				if (p == 0) {
-					std::cout << "sumGradWeights: " << sumGradWeights << std::endl;
-				//	std::cout<< "       pos loc: " << pLoc[0] << "," << pLoc[1] << "," << pLoc[2] << std::endl;
-				}
-
+				// -- turn this check back on once we have bounds to prohibit our particles from stepping out of the grid box
+				//if ( !(WeightVals::floatEquals(sumWeights, 1.f)) ) {
+				//	throw;
+				//}
 			} // end: looping through each particle
-
 			
 		}
 
 		// G2P
 		template <Attribute A, typename ParticleSet, typename AttributeGrid>
 		static void GridToParticle(const AttributeGrid &attributeGrid, const Eigen::Array<T, Dimension, 1> &origin, ParticleSet &particleSet) {
-			
-			/*
-			const auto& keyAttributes = particleSet.GetAttributeList<Key>();
-			auto& targetAttributes = particleSet.GetAttributeList<A>();
-			const auto& sourceGrid = attributeGrid.GetGrid<A>();
-
-			for (unsigned int p = 0; p < particleSet.Size(); ++p) {
-				const auto& key = keyAttributes[p];
-				Eigen::Array<unsigned int, Dimension, 1> ll = ((key - origin) / attributeGrid.CellSize()).cast<unsigned int>();
-				auto* gridAttributell = sourceGrid.at(ll);
-				if (gridAttributell) {
-					targetAttributes[p] = *gridAttributell;
-				}
-			}
-			*/
 
 			const auto& keyAttributes = particleSet.GetAttributeList<Key>(); // pos
 			auto& targetAttributes = particleSet.GetAttributeList<A>(); // attribute
@@ -353,7 +318,6 @@ namespace simulation {
 				} // end: looping through all three dimensions for interpolating grid value
 
 				targetAttributes[p] = gridVal_weighted;
-
 			} // end: looping through each particle
 		
 		}
