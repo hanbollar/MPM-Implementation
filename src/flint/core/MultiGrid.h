@@ -11,7 +11,155 @@ class MultiGridBase {
     public:
         using Index = Eigen::Array<unsigned int, Dimension, 1>;
 
+        virtual const T& operator[](const Index &indices) const = 0;
+        virtual T& operator[](const Index &indices) = 0;
+
         virtual void Fill(const T& value) = 0;
+        virtual Index GetSizes() const = 0;
+
+        class CellIterator {
+            class iterator {
+            public:
+                iterator(const Index& index, MultiGridBase* grid) : index(index), grid(grid), sizes(grid->GetSizes()) { }
+
+                iterator& operator++() {
+                    for (unsigned int d = 0; d < Dimension; ++d) {
+                        index[d]++;
+                        if (index[d] >= sizes[d]) {
+                            index[d] = 0;
+                        }
+                        else {
+                            break;
+                        }
+                        if (d == Dimension - 1) {
+                            done = true;
+                        }
+                    }
+                    return *this;
+                }
+
+                T& operator*() const {
+                    return (*grid)[index];
+                }
+
+                friend bool operator!=(const iterator& a, const iterator& b) {
+                    for (unsigned int d = 0; d < Dimension; ++d) {
+                        if (a.done != b.done || a.index[d] != b.index[d]) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                friend bool operator==(const iterator& a, const iterator& b) {
+                    return !operator!=(a, b);
+                }
+
+            private:
+                bool done = false;
+                Index index;
+                Index sizes;
+                MultiGridBase* grid;
+            };
+
+        public:
+            CellIterator(MultiGridBase* grid) : grid(grid) { }
+
+            iterator begin() const {
+                Index index;
+                for (unsigned int d = 0; d < Dimension; ++d) {
+                    index[d] = 0;
+                }
+
+                return iterator(index, grid);
+            }
+
+            iterator end() const {
+                Index index = grid->GetSizes();
+                iterator iter(index, grid);
+                iter.operator++();
+                return iter;
+            }
+
+        private:
+            MultiGridBase* grid;
+        };
+
+        class IndexIterator {
+            class iterator {
+            public:
+                iterator(const Index& index, MultiGridBase* grid) : index(index), grid(grid), sizes(grid->GetSizes()) { }
+
+                iterator& operator++() {
+                    for (unsigned int d = 0; d < Dimension; ++d) {
+                        index[d]++;
+                        if (index[d] >= sizes[d]) {
+                            index[d] = 0;
+                        }
+                        else {
+                            break;
+                        }
+                        if (d == Dimension - 1) {
+                            done = true;
+                        }
+                    }
+                    return *this;
+                }
+
+                const Index& operator*() const {
+                    return index;
+                }
+
+                friend bool operator!=(const iterator& a, const iterator& b) {
+                    for (unsigned int d = 0; d < Dimension; ++d) {
+                        if (a.done != b.done || a.index[d] != b.index[d]) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                friend bool operator==(const iterator& a, const iterator& b) {
+                    return !operator!=(a, b);
+                }
+
+            private:
+                bool done = false;
+                Index index;
+                Index sizes;
+                MultiGridBase* grid;
+            };
+
+        public:
+            IndexIterator(MultiGridBase* grid) : grid(grid) { }
+
+            iterator begin() const {
+                Index index;
+                for (unsigned int d = 0; d < Dimension; ++d) {
+                    index[d] = 0;
+                }
+
+                return iterator(index, grid);
+            }
+
+            iterator end() const {
+                Index index = grid->GetSizes();
+                iterator iter(index, grid);
+                iter.operator++();
+                return iter;
+            }
+
+        private:
+            MultiGridBase* grid;
+        };
+
+        CellIterator IterateCells() {
+            return CellIterator(this);
+        }
+
+        IndexIterator IterateIndices() {
+            return IndexIterator(this);
+        }
 };
 
 template <typename T, unsigned int Dimension>
@@ -54,11 +202,11 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
             return contents[computeIndex(i)];
         }
 
-        const T& operator[](const Index &indices) const {
+        const T& operator[](const Index &indices) const override {
             return contents[computeIndex(indices)];
         }
 
-        T& operator[](const Index &indices) {
+        T& operator[](const Index &indices) override {
             return contents[computeIndex(indices)];
         }
 
@@ -82,74 +230,8 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
             }
         }
 
-        class CellIterator {
-            class iterator {
-                public:
-                    iterator(const Index& index, MultiGrid* grid) : index(index), grid(grid) { }
-                    
-                    iterator& operator++() {
-                        for (unsigned int d = 0; d < Dimension; ++d) {
-                            index[d]++;
-                            if (index[d] >= grid->sizes[d]) {
-                                index[d] = 0;
-                            } else {
-                                break;
-                            }
-                            if (d == Dimension - 1) {
-                                done = true;
-                            }
-                        }
-                        return *this;
-                    }
-
-                    T& operator*() const {
-                        return (*grid)[index];
-                    }
-
-                    friend bool operator!=(const iterator& a, const iterator& b) {
-                        for (unsigned int d = 0; d < Dimension; ++d) {
-                            if (a.done != b.done || a.index[d] != b.index[d]) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    }
-
-                    friend bool operator==(const iterator& a, const iterator& b) {
-                        return !operator!=(a, b);
-                    }
-
-                private:
-                    bool done = false;
-                    Index index;
-                    MultiGrid* grid;
-            };
-            
-            public:
-                CellIterator(MultiGrid* grid) : grid(grid) { }
-
-                iterator begin() const {
-                    Index index;
-                    for (unsigned int d = 0; d < Dimension; ++d) {
-                        index[d] = 0;
-                    }
-
-                    return iterator(index, grid);
-                }
-                
-                iterator end() const {
-                    Index index = grid->sizes;
-                    iterator iter(index, grid);
-                    iter.operator++();
-                    return iter;
-                }
-
-            private:
-                MultiGrid* grid;
-        };
-
-        CellIterator IterateCells() {
-            return CellIterator(this);
+        Index GetSizes() const override {
+            return sizes;
         }
 
     private:
@@ -195,12 +277,12 @@ class ResizeableMultiGrid : public MultiGridBase<T, Dimension> {
             return contents[index](std::forward<Args>(indices)...);
         }
 
-        const T& operator[](const Index &indices) const {
+        const T& operator[](const Index &indices) const override {
             const typename InnerGrid::Index& innerIndices = *reinterpret_cast<const typename InnerGrid::Index*>(&indices[1]);
             return contents[indices[0]][innerIndices];
         }
 
-        T& operator[](const Index &indices) {
+        T& operator[](const Index &indices) override {
             const typename InnerGrid::Index& innerIndices = *reinterpret_cast<const typename InnerGrid::Index*>(&indices[1]);
             return contents[indices[0]][innerIndices];
         }
@@ -226,6 +308,16 @@ class ResizeableMultiGrid : public MultiGridBase<T, Dimension> {
                 content.Fill(value);
             }
         }
+
+        template <unsigned int... I>
+        Index GetSizesImpl(std::index_sequence<I...>) const {
+            const auto& innerSize = contents[0].GetSizes();
+            return Index(contents.size(), innerSize[I]...);
+        }
+
+        Index GetSizes() const override {
+            return GetSizesImpl(std::make_index_sequence<Dimension - 1>{});
+        }
 };
 
 template <typename T>
@@ -249,11 +341,11 @@ class ResizeableMultiGrid<T, 1> : public MultiGridBase<T, 1> {
             return contents[index];
         }
 
-        const T& operator[](const Index &indices) const {
+        const T& operator[](const Index &indices) const override {
             return contents[indices[0]];
         }
 
-        T& operator[](const Index &indices) {
+        T& operator[](const Index &indices) override {
             return contents[indices[0]];
         }
 
@@ -270,15 +362,19 @@ class ResizeableMultiGrid<T, 1> : public MultiGridBase<T, 1> {
                 contents[i] = value;
             }
         }
+
+        Index GetSizes() const override {
+            return Index(contents.size());
+        }
 };
 
 template <typename T, unsigned int Dimension, unsigned int... Args>
-class StaticMultiGrid : public MultiGridBase<T, sizeof...(Args)> {
+class StaticMultiGrid : public MultiGridBase<T, 1 + sizeof...(Args)> {
     using InnerGrid = StaticMultiGrid<T, Args...>;
     std::array<InnerGrid, Dimension> contents;
 
     public:
-        using Index = typename MultiGridBase<T, sizeof...(Args)>::Index;
+        using Index = typename MultiGridBase<T, 1 + sizeof...(Args)>::Index;
 
         template<typename... _Args>
         const T& operator()(unsigned int index, _Args&&... indices) const {
@@ -305,10 +401,14 @@ class StaticMultiGrid : public MultiGridBase<T, sizeof...(Args)> {
                 content.Fill(value);
             }
         }
+
+        Index GetSizes() const override {
+            return Index(Dimension, Args...);
+        }
 };
 
 template <typename T, unsigned int Dimension>
-class StaticMultiGrid<T, Dimension> : public MultiGridBase<T, Dimension> {
+class StaticMultiGrid<T, Dimension> : public MultiGridBase<T, 1> {
     std::array<T, Dimension> contents;
 
     public:
@@ -334,6 +434,10 @@ class StaticMultiGrid<T, Dimension> : public MultiGridBase<T, Dimension> {
             for (unsigned int i = 0; i < contents.size(); ++i) {
                 contents[i] = value;
             }
+        }
+
+        Index GetSizes() const override {
+            return Index(Dimension);
         }
 };
 
