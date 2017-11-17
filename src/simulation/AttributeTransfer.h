@@ -219,9 +219,10 @@ namespace simulation {
 			return core::StaticMultiGrid<unsigned int, (I, Dimension)...>();
 		}
 
-		static constexpr void ApplyOverKernel(const std::function<void(const typename core::MultiGridBase<unsigned int, Dimension>::Index&)> &func) {
-			static const auto kernel = KernelGridImpl(std::make_index_sequence<Dimension>());
-			kernel.ApplyOverIndices(func);
+		static const void ApplyOverKernel(const std::function<void(const typename core::MultiGridBase<unsigned int, Dimension>::Index&)> &func) {
+			//static const auto kernel = KernelGridImpl(std::make_index_sequence<Dimension>());
+            static const auto kernel = core::StaticMultiGrid<unsigned int, Dimension, Dimension, Dimension>();
+            kernel.ApplyOverIndices(func);
 		}
 
 		template <Attribute A, typename ParticleSet, typename AttributeGrid>
@@ -254,7 +255,6 @@ namespace simulation {
 					gridLoc = baseNodeLoc + index.cast<float>() * cellSize;
 
 					auto weightVal_calc = weights.calcWip(pLoc, gridLoc, cellSize);
-					Eigen::Array<T, Dimension, 1> sourceVal_weighted = sourceVal * weightVal_calc;
 
 					sumWeights += weightVal_calc;
 
@@ -263,7 +263,7 @@ namespace simulation {
 
 					// if grid location exits in grid then alter it
 					if (gridAttributeAtLoc) {
-						*gridAttributeAtLoc += sourceVal_weighted;
+						*gridAttributeAtLoc += sourceVal * weightVal_calc;
 					}
 				});
 
@@ -281,6 +281,7 @@ namespace simulation {
 
 			const auto& keyAttributes = particleSet.GetAttributeList<Key>(); // pos
 			auto& targetAttributes = particleSet.GetAttributeList<A>(); // attribute
+            using TargetType = std::remove_reference<decltype(targetAttributes[0])>::type;
 			const auto& weightAttributes = particleSet.GetAttributeList<SimulationAttribute::Weights>();
 			const auto& sourceGrid = attributeGrid.GetGrid<A>();
 
@@ -300,7 +301,7 @@ namespace simulation {
 				Eigen::Array<float, Dimension, 1> gridLoc = Eigen::Array<float, Dimension, 1>();
 				gridLoc.fill(0.f);
 
-				auto& gridVal_weighted = Eigen::Array<float, Dimension, 1>();
+                TargetType gridVal_weighted;// Eigen::Array<float, Dimension, 1>();
 				gridVal_weighted.fill(0.f);
 
 				ApplyOverKernel([&](const auto& index) {
