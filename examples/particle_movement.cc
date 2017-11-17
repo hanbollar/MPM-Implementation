@@ -65,7 +65,7 @@ struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Mass> {
 
 template <>
 struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Force> {
-    using type = Eigen::Matrix<float, kDimension, kDimension>;
+    using type = Eigen::Array<float, kDimension, 1>;
 };
 
 template <>
@@ -196,6 +196,8 @@ int main(int argc, char** argv) {
     camera.SetDistance(1.5f * largestLength);
     camera.Rotate(-70.f * static_cast<float>(kPI) / 180.f, 0);
 
+    using GridIndex = Eigen::Array<unsigned int, kDimension, 1>;
+        
     // Initialize a grid to twice the size of the bounding box
     Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 2.f;
     Eigen::Array<float, kDimension, 1> gridOrigin = (boundingBox->max() + boundingBox->min()) / 2.f - gridSize / 2.f;
@@ -232,7 +234,7 @@ int main(int argc, char** argv) {
     // Initialize grid forces to 0
     auto& gridForces = grid.GetGrid<SimulationAttribute::Force>();
     gridForces.ApplyOverCells([&](auto& gridForce) {
-        gridForce = Eigen::Matrix<float, kDimension, kDimension>::Identity();
+        gridForce = { 0, 0, 0 };
     });
    
      // Initialize grid masses to 0
@@ -255,54 +257,87 @@ int main(int argc, char** argv) {
         auto& gridForces = grid.GetGrid<SimulationAttribute::Force>();
         auto& gridMasses = grid.GetGrid<SimulationAttribute::Mass>();
 
-        // Clear grid velocities and masses (just in case) - basically like doing the mivi / mi if a grid node has mass associated with it
-        gridVelocities.ApplyOverCells([](auto& gridVelocity) {
-            gridVelocity = { 0, 0, 0 };
-        });
+        /***************************
+        ****************************
+        ******* Patricle2Grid ******
+        ****************************
+        ****************************/
 
         gridMasses.ApplyOverCells([](auto& gridMass) {
             gridMass = 0.f;
         });
 
         AttributeTransfer::ParticleToGrid<SimulationAttribute::Mass>(particles, grid, gridOrigin);
-        AttributeTransfer::ParticleToGrid<SimulationAttribute::Velocity>(particles, grid, gridOrigin);
+
+        // Replaced by loop below
+        // AttributeTransfer::ParticleToGrid<SimulationAttribute::Velocity>(particles, grid, gridOrigin);
+        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, GridIndex offset, GridIndex i) {
+            auto* gridVelocity = gridVelocities.at(i);
+            auto* gridMass = gridMasses.at(i);
+
+            // if grid location exits in grid then alter it
+            if (gridVelocity && gridMass) {
+                *gridVelocity = ((weight * particleMasses[p] * particleVelocities[p]) / *gridMass) * (*gridMass != 0);
+            }
+        });
+
+        /***************************
+        ****************************
+        ***** UPDATE ATTRIBUTES ****
+        ****************************
+        ****************************/
 
         // advect by gravity
 		float stepSize = simulationTimestep.count() / 1000.0f;
-        gridVelocities.ApplyOverCells([&](auto& gridVelocity) {
-            // if gridMass = 0, skip this node.
-            gridVelocity[1] -= 9.80665f * stepSize;// / (weight is nonzero) ? mass : 1;
-            // Compute Force Here
-            // vi += stepsize*force/mass
-            // if vi
+
+        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, GridIndex offset, GridIndex i) {
+            auto* gridVelocity = gridVelocities.at(i);
+            auto* gridForce    = gridForces.at(i);
+            auto* gridMass     = gridMasses.at(i);
+
+            // if grid location exits in grid then alter it
+            if (gridVelocity && gridMass) {
+               *gridVelocity += (*gridForce / *gridMass) * stepSize;
+            }
         });
-        gridVelocities.ApplyOverIndices([&](const auto& i) {
-            gridVelocities[i][1] -= 9.80665f * stepSize;
-            // gridVelocities[i] = gridForces[i] * gridVelocities[i];
-        });
 
-        float sigma = 0;
-        auto& particleVelocities = particles.GetAttributeList<SimulationAttribute::Velocity>();
+        // still need to update force - see hannah's notes
+        // do that above the force
+        // velocity is computed above already
 
-        for (unsigned int p = 0; p < particles.Size(); ++p) {
-            // TODO: Finish This
-            // Negative sum
-            //sigma -= /*density *  particleVelocities[p] * */ particleForces[p].transpose();
-        }
+        // then do boundary condition - inelastic bounce? choose type?
+        // do condition: if boundary grid node is inside an object, the object is outside of the grid, aka set that grid node's velocity to 0...how do you do that?????
+        /******* TODO: Uncomment this once you figure out how to check for grid boundary  ****/
+        // AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, GridIndex offset, GridIndex i) {
+        //     auto* gridPosition   = gridPositions.at(i);
+        //     auto* gridVelocities = gridVelocities.at(i); 
 
-        auto& weights = particles.GetAttributeList<SimulationAttribute::Weights>();
-        for (auto& w : weights) {
-           
-        }
+        //     // if grid location exits in grid then alter it
+        //     if (gridPosition && outOfBounds(gridPosition)) {
+        //         *gridVelocity = 0;
+        //     }
+        // });
 
-        //for (auto& gridForce : gridForces.IterateCells()) {
-        //    // Use Sigma to multiply grad Wip
-        //    gridForce += gridForces * vel *  * stepSize;
-        //}
+        /***************************
+        ****************************
+        ******* Grid2Particle ******
+        ****************************
+        ****************************/
 
         // Transfer back to particles
         // Velocity
         AttributeTransfer::GridToParticle<SimulationAttribute::Velocity>(grid, gridOrigin, particles);
+        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, GridIndex offset, GridIndex i) {
+            auto* gridForce = gridForces.at(i);
+            auto& particleVelocity = particleVelocities.at(p);
+
+            // if grid location exits in grid then alter it
+            if (gridForce) {
+                Eigen::Matrix<float, kDimension, kDimension> I = Eigen::Matrix<float, kDimension, kDimension>::Identity().matrix();
+                Eigen::Array<float, kDimension, 1> sigmaStuff = (particleVelocity * stepSize);  /** gradWip.transpose (needs austin) */
+                *gridForce = (I * gridForce->matrix()) + (sigmaStuff * *gridForce).matrix();
+            }
+        });
         
         // Update positions
         core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {

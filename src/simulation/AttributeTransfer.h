@@ -1,6 +1,6 @@
 
 #pragma once
-
+#include <functional>
 #include <Eigen/Dense>
 #include "flint/core/MultiGrid.h"
 #include "flint/core/VectorUtils.h"
@@ -11,6 +11,7 @@ namespace simulation {
 	struct AttributeTransfer {
 
 		/* PARTICLE TRANSFER CALCULATIONS */
+        using GridIndex = Eigen::Array<unsigned int, Dimension, 1>;
 
 		class WeightVals {
 
@@ -172,7 +173,7 @@ namespace simulation {
 			}
 
 			// calculating Wip with reference to a specific cell xi
-			float calcWip(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) {
+			float calcWip(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) const {
 				// here xp, xi have already been modified by origin but have not yet been divided by cellSize
 
 				Eigen::Array<T, Dimension, 1> index = indexInto(xp_modif, xi_modif, cellSize);
@@ -215,15 +216,42 @@ namespace simulation {
 		// P2G
 
 		template <unsigned int... I>
-        static constexpr decltype(auto) KernelGridImpl(std::index_sequence<I...>) {
+        static decltype(auto) KernelGridImpl(std::index_sequence<I...>) {
 			return core::StaticMultiGrid<unsigned int, (I, Dimension)...>();
 		}
 
-		static const void ApplyOverKernel(const std::function<void(const typename core::MultiGridBase<unsigned int, Dimension>::Index&)> &func) {
-			//static const auto kernel = KernelGridImpl(std::make_index_sequence<Dimension>());
+		static const void ApplyOverKernel(const std::function<void(const GridIndex&)> &func) {
+			//static constexpr auto kernel = KernelGridImpl(std::make_index_sequence<Dimension>());
             static const auto kernel = core::StaticMultiGrid<unsigned int, Dimension, Dimension, Dimension>();
             kernel.ApplyOverIndices(func);
 		}
+
+        template <typename ParticleSet, typename AttributeGrid>
+        static void IterateParticleKernel(
+                const ParticleSet &particleSet,
+                AttributeGrid &attributeGrid,
+                const Eigen::Array<T, Dimension, 1> &origin,
+                const std::function<void(unsigned int, float, const GridIndex&, const GridIndex&)> &func) {
+
+            const auto& keyAttributes = particleSet.GetAttributeList<Key>(); // pos
+            const auto& weightAttributes = particleSet.GetAttributeList<SimulationAttribute::Weights>();
+            auto cellSize = attributeGrid.CellSize();
+
+            core::VectorUtils::ApplyOverIndices(keyAttributes, [&](unsigned int p) {
+                auto& key = keyAttributes[p];
+                auto& weights = weightAttributes[p];
+
+                Eigen::Array<T, Dimension, 1> baseNodeLoc = WeightVals::baseNodeLoc(key, origin, cellSize);
+                Eigen::Array<T, Dimension, 1> pLoc = WeightVals::particleLoc(key, origin);
+
+                ApplyOverKernel([&](const auto& index) {
+                    Eigen::Array<float, Dimension, 1> gridLoc = baseNodeLoc + index.cast<float>() * cellSize;
+					float weightVal_calc = weights.calcWip(pLoc, gridLoc, cellSize);
+					Eigen::Array<unsigned int, Dimension, 1> gridCell = (gridLoc / cellSize).cast<unsigned int>();
+                    func(p, weightVal_calc, index, gridCell);
+				});
+            });
+        }
 
 		template <Attribute A, typename ParticleSet, typename AttributeGrid>
 		static void ParticleToGrid(const ParticleSet &particleSet, AttributeGrid &attributeGrid, const Eigen::Array<T, Dimension, 1> &origin) {
