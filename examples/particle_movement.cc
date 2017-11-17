@@ -9,6 +9,7 @@
 #include "flint/core/Camera.h"
 #include "flint/core/Math.h"
 #include "flint/core/Optional.h"
+#include "flint/core/VectorUtils.h"
 #include "flint/geometry/Triangle.h"
 #include "flint/import/ObjLoader.h"
 #include "flint/intersection/Ray.h"
@@ -200,28 +201,26 @@ int main(int argc, char** argv) {
     particles.Resize(samples.size());
 
     // Initialize particle masses to 1
-    for (auto& particleMass : particles.GetAttributeList<SimulationAttribute::Mass>()) {
-        particleMass = 1.f;
-    }
+    auto& particleMasses = particles.GetAttributeList<SimulationAttribute::Mass>();
+    core::VectorUtils::ApplyOverElements(particleMasses, [](auto& mass) {
+        mass = 1.f;
+    });
 
     // Initialize particle velocities to 0
-    for (auto& particleVelocity : particles.GetAttributeList<SimulationAttribute::Velocity>()) {
-        particleVelocity = 0.f;
-    }
+    auto& particleVelocities = particles.GetAttributeList<SimulationAttribute::Velocity>();
+    core::VectorUtils::ApplyOverElements(particleVelocities, [](auto& velocity) {
+        velocity = 0.f;
+    });
 
     // Set particle positions as sample positions
     auto& particlePositions = particles.GetAttributeList<SimulationAttribute::Position>();
     particlePositions = samples;
 
 	// Initialize grid weights for each particle
-	auto& velo_Grid = grid.GetGrid<SimulationAttribute::Velocity>();
-	int pw = 0;
-	for (auto& particleWeights : particles.GetAttributeList<SimulationAttribute::Weights>()) {
-		particleWeights.fillWeights(particlePositions[pw],
-									grid.CellSize(),
-									gridOrigin);
-		pw += 1;
-	}
+    auto& particleWeights = particles.GetAttributeList<SimulationAttribute::Weights>();
+    core::VectorUtils::ApplyOverIndices(particleWeights, [&](unsigned int p) {
+        particleWeights[p].fillWeights(particlePositions[p], grid.CellSize(), gridOrigin);
+    });
 
     // Wait in case the viewport has not yet been initialized
     while (!viewport->GetWindow()->IsInitialized()) {
@@ -236,35 +235,30 @@ int main(int argc, char** argv) {
         auto& gridVelocities = grid.GetGrid<SimulationAttribute::Velocity>();
 
         // Clear grid velocities - basically like doing the mivi / mi if a grid node has mass associated with it
-        for (auto& gridVelocity : gridVelocities.IterateCells()) {
-            gridVelocity = {0, 0, 0};
-        }
+        gridVelocities.ApplyOverCells([](auto& gridVelocity) {
+            gridVelocity = { 0, 0, 0 };
+        });
 
         AttributeTransfer::ParticleToGrid<SimulationAttribute::Velocity>(particles, grid, gridOrigin);
 
         // advect by gravity
 		float stepSize = simulationTimestep.count() / 1000.0f;
-        for (auto& gridVelocity : gridVelocities.IterateCells()) {
-			gridVelocity[1] -= 9.80665f * stepSize;
-        }
+        gridVelocities.ApplyOverCells([&](auto& gridVelocity) {
+            gridVelocity[1] -= 9.80665f * stepSize;
+        });
 
         // Transfer back to particles
         AttributeTransfer::GridToParticle<SimulationAttribute::Velocity>(grid, gridOrigin, particles);
 
         // Update positions
-        auto& particleVelocities = particles.GetAttributeList<SimulationAttribute::Velocity>();
-        for (unsigned int p = 0; p < particles.Size(); ++p) {
-			particlePositions[p] += particleVelocities[p] * stepSize;
-        }
+        core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
+            particlePositions[p] += particleVelocities[p] * stepSize;
+        });
 
 		// Update grid weights
-		int pw = 0;
-		for (auto& particleWeights : particles.GetAttributeList<SimulationAttribute::Weights>()) {
-			particleWeights.fillWeights(particlePositions[pw],
-				grid.CellSize(),
-				gridOrigin);
-			pw += 1;
-		}
+        core::VectorUtils::ApplyOverIndices(particleWeights, [&](unsigned int p) {
+            particleWeights[p].fillWeights(particlePositions[p], grid.CellSize(), gridOrigin);
+        });
 
         auto end = std::chrono::system_clock::now();
         auto elapsed = end - start;

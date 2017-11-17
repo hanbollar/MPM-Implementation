@@ -160,6 +160,28 @@ class MultiGridBase {
         IndexIterator IterateIndices() {
             return IndexIterator(this);
         }
+
+        template <typename F>
+        void ApplyOverCells(F func) const {
+            for (const auto& cell : IterateCells()) {
+                func(cell);
+            }
+        }
+
+        template <typename F>
+        void ApplyOverCells(F func) {
+            for (auto& cell : IterateCells()) {
+                func(cell);
+            }
+        }
+
+        template <typename F>
+        void ApplyOverIndices(F func) const {
+            for (const auto& index : IterateIndices()) {
+                func(index);
+            }
+        }
+
 };
 
 template <typename T, unsigned int Dimension>
