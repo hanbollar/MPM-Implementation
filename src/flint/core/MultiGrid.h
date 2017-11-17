@@ -88,7 +88,7 @@ class MultiGridBase {
         class IndexIterator {
             class iterator {
             public:
-                iterator(const Index& index, MultiGridBase* grid) : index(index), grid(grid), sizes(grid->GetSizes()) { }
+                iterator(const Index& index, const MultiGridBase* grid) : index(index), grid(grid), sizes(grid->GetSizes()) { }
 
                 iterator& operator++() {
                     for (unsigned int d = 0; d < Dimension; ++d) {
@@ -127,11 +127,11 @@ class MultiGridBase {
                 bool done = false;
                 Index index;
                 Index sizes;
-                MultiGridBase* grid;
+                const MultiGridBase* grid;
             };
 
         public:
-            IndexIterator(MultiGridBase* grid) : grid(grid) { }
+            IndexIterator(const MultiGridBase* grid) : grid(grid) { }
 
             iterator begin() const {
                 Index index;
@@ -150,14 +150,14 @@ class MultiGridBase {
             }
 
         private:
-            MultiGridBase* grid;
+            const MultiGridBase* grid;
         };
 
         CellIterator IterateCells() {
             return CellIterator(this);
         }
 
-        IndexIterator IterateIndices() {
+        IndexIterator IterateIndices() const {
             return IndexIterator(this);
         }
 
