@@ -48,15 +48,15 @@ add_library(glfw STATIC IMPORTED GLOBAL)
 set_target_properties(glfw PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}glfw3${CMAKE_STATIC_LIBRARY_SUFFIX})
 set(GLFW_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include PARENT_SCOPE)
 
-ExternalProject_Add(png
-    GIT_REPOSITORY https://github.com/glennrp/libpng.git
-    GIT_TAG libpng16
-    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
-)
+#ExternalProject_Add(png
+#    GIT_REPOSITORY https://github.com/glennrp/libpng.git
+#     GIT_TAG libpng16
+#    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+#)
 
-add_library(png16 STATIC IMPORTED GLOBAL)
-set_target_properties(png16 PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}png16${CMAKE_STATIC_LIBRARY_SUFFIX})
-set(PNG_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include PARENT_SCOPE)
+#add_library(png16 STATIC IMPORTED GLOBAL)
+#set_target_properties(png16 PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}png16${CMAKE_STATIC_LIBRARY_SUFFIX})
+#set(PNG_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include PARENT_SCOPE)
 
 ExternalProject_Add(googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
