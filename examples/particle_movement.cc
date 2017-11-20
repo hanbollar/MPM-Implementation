@@ -32,11 +32,13 @@ Camera<float> camera;
 
 // Declare attributes we will use in the simulation
 enum class SimulationAttribute {
+    InitialVolume,
     Position,
     Velocity,
     Mass,
 	Weights,
-    Force
+    Force,
+    DeformationUpdate,
 };
 
 // Configure attribute transfer to transfer by position
@@ -49,13 +51,18 @@ struct AttributeDefinitions {
 };
 
 template <>
+struct AttributeDefinitions::AttributeInfo<SimulationAttribute::InitialVolume> {
+    using type = float;
+};
+
+template <>
 struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Position> {
-    using type = Eigen::Array<float, kDimension, 1>;
+    using type = Eigen::Matrix<float, kDimension, 1>;
 };
 
 template <>
 struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity> {
-    using type = Eigen::Array<float, kDimension, 1>;
+    using type = Eigen::Matrix<float, kDimension, 1>;
 };
 
 template <>
@@ -65,7 +72,12 @@ struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Mass> {
 
 template <>
 struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Force> {
-    using type = Eigen::Array<float, kDimension, 1>;
+    using type = Eigen::Matrix<float, kDimension, 1>;
+};
+
+template <>
+struct AttributeDefinitions::AttributeInfo<SimulationAttribute::DeformationUpdate> {
+    using type = Eigen::Matrix<float, kDimension, kDimension>;
 };
 
 template <>
@@ -75,10 +87,13 @@ struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Weights> {
 
 // Declare the set of particle attributes
 simulation::ParticleSet<SimulationAttribute, AttributeDefinitions,
+    SimulationAttribute::InitialVolume,
+    SimulationAttribute::DeformationUpdate,
     SimulationAttribute::Position,
     SimulationAttribute::Velocity,
     SimulationAttribute::Mass,
-	SimulationAttribute::Weights
+	SimulationAttribute::Weights,
+    SimulationAttribute::Force
 > particles;
 
 // Declare the grid attributes
@@ -204,10 +219,19 @@ int main(int argc, char** argv) {
     grid.Resize(2.f / density, gridSize);
     
     // Generate samples inside the mesh
-    auto samples = sampling::SampleMesh<float>(mesh, largestLength / density);
+    float coverage;
+    auto samples = sampling::SampleMesh<float>(mesh, largestLength / density, &coverage);
     delete mesh; // mesh is no longer needed
 
     particles.Resize(samples.size());
+
+    auto extent = boundingBox->max() - boundingBox->min();
+    float initialParticleVolume = extent[0] * extent[1] * extent[2] * coverage / static_cast<float>(samples.size());
+
+    auto& particleVolumes = particles.GetAttributeList<SimulationAttribute::InitialVolume>();
+    core::VectorUtils::ApplyOverElements(particleVolumes, [&](auto& particleVolume) {
+        particleVolume = 1.f;
+    });
 
     // Initialize particle masses to 1
     auto& particleMasses = particles.GetAttributeList<SimulationAttribute::Mass>();
@@ -218,12 +242,20 @@ int main(int argc, char** argv) {
     // Initialize particle velocities to 0
     auto& particleVelocities = particles.GetAttributeList<SimulationAttribute::Velocity>();
     core::VectorUtils::ApplyOverElements(particleVelocities, [](auto& velocity) {
-        velocity = 0.f;
+        velocity = { 0, 0, 0 };
+    });
+
+    // Initialize particle forces to 0
+    auto& particleForces = particles.GetAttributeList<SimulationAttribute::Force>();
+    core::VectorUtils::ApplyOverElements(particleForces, [](auto& force) {
+        force = { 0, 0, 0 };
     });
 
     // Set particle positions as sample positions
     auto& particlePositions = particles.GetAttributeList<SimulationAttribute::Position>();
-    particlePositions = samples;
+    core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
+        particlePositions[p] = samples[p].matrix();
+    });
 
 	// Initialize grid weights for each particle
     auto& particleWeights = particles.GetAttributeList<SimulationAttribute::Weights>();
@@ -250,6 +282,7 @@ int main(int argc, char** argv) {
 
     // Step simulation until the viewport closes
     unsigned int step = 0;
+    float stepSize = simulationTimestep.count() / 1000.0f;
     while (!viewport->GetWindow()->ShouldClose()) {
         auto start = std::chrono::system_clock::now();
 
@@ -267,17 +300,25 @@ int main(int argc, char** argv) {
             gridMass = 0.f;
         });
 
+        gridVelocities.ApplyOverCells([](auto& gridVelocity) {
+            gridVelocity = { 0, 0, 0 };
+        });
+
+        gridForces.ApplyOverCells([](auto& gridForce) {
+            gridForce = { 0, 0, 0 };
+        });
+
         AttributeTransfer::ParticleToGrid<SimulationAttribute::Mass>(particles, grid, gridOrigin);
 
         // Replaced by loop below
         // AttributeTransfer::ParticleToGrid<SimulationAttribute::Velocity>(particles, grid, gridOrigin);
-        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, GridIndex offset, GridIndex i) {
+        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Array<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
             auto* gridVelocity = gridVelocities.at(i);
             auto* gridMass = gridMasses.at(i);
 
             // if grid location exits in grid then alter it
-            if (gridVelocity && gridMass) {
-                *gridVelocity = ((weight * particleMasses[p] * particleVelocities[p]) / *gridMass) * (*gridMass != 0);
+            if (gridVelocity && gridMass && *gridMass != 0) {
+                *gridVelocity += ((weight * particleMasses[p] * particleVelocities[p]) / *gridMass);
             }
         });
 
@@ -287,10 +328,7 @@ int main(int argc, char** argv) {
         ****************************
         ****************************/
 
-        // advect by gravity
-		float stepSize = simulationTimestep.count() / 1000.0f;
-
-        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, GridIndex offset, GridIndex i) {
+        /*AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Array<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
             auto* gridVelocity = gridVelocities.at(i);
             auto* gridForce    = gridForces.at(i);
             auto* gridMass     = gridMasses.at(i);
@@ -299,7 +337,8 @@ int main(int argc, char** argv) {
             if (gridVelocity && gridMass) {
                *gridVelocity += (*gridForce / *gridMass) * stepSize;
             }
-        });
+        });*/
+        
 
         // still need to update force - see hannah's notes
         // do that above the force
@@ -318,6 +357,24 @@ int main(int argc, char** argv) {
         //     }
         // });
 
+        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Matrix<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
+            auto* gridForce = gridForces.at(i);
+            if (gridForce) {
+                auto P = Eigen::Matrix<float, kDimension, 1>();
+                *gridForce -= particleVolumes[p] * P * particleForces[p].transpose() * weightGrad;
+            }
+        });
+
+        gridVelocities.ApplyOverIndices([&](const auto& i) {
+            if (gridMasses[i] != 0) { // OPTIMIZE later
+                gridVelocities[i] += stepSize * gridForces[i] / gridMasses[i];
+            }
+        });
+
+        gridVelocities.ApplyOverIndices([&](const auto& i) {
+            gridVelocities[i][1] -= 9.80665 * stepSize;
+        });
+
         /***************************
         ****************************
         ******* Grid2Particle ******
@@ -327,21 +384,26 @@ int main(int argc, char** argv) {
         // Transfer back to particles
         // Velocity
         AttributeTransfer::GridToParticle<SimulationAttribute::Velocity>(grid, gridOrigin, particles);
-        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, GridIndex offset, GridIndex i) {
-            auto* gridForce = gridForces.at(i);
-            auto& particleVelocity = particleVelocities.at(p);
+        //AttributeTransfer::GridToParticle<SimulationAttribute::Position>(grid, gridOrigin, particles);
 
-            // if grid location exits in grid then alter it
-            if (gridForce) {
-                Eigen::Matrix<float, kDimension, kDimension> I = Eigen::Matrix<float, kDimension, kDimension>::Identity().matrix();
-                Eigen::Array<float, kDimension, 1> sigmaStuff = (particleVelocity * stepSize);  /** gradWip.transpose (needs austin) */
-                *gridForce = (I * gridForce->matrix()) + (sigmaStuff * *gridForce).matrix();
-            }
-        });
-        
         // Update positions
         core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
             particlePositions[p] += particleVelocities[p] * stepSize;
+        });
+
+        // Update particle force
+        auto& deformationUpdates = particles.GetAttributeList<SimulationAttribute::DeformationUpdate>();
+        core::VectorUtils::ApplyOverElements(deformationUpdates, [](auto& deformationUpdate) {
+            deformationUpdate = Eigen::Matrix<float, kDimension, kDimension>::Zero();
+        });
+        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Matrix<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
+            auto* gridVelocity = gridVelocities.at(i);
+            if (gridVelocity) {
+                deformationUpdates[p] += stepSize * gridVelocities[i] * weightGrad.transpose();
+            }
+        });
+        core::VectorUtils::ApplyOverIndices(particleForces, [&](unsigned int p) {
+            particleForces[p] += deformationUpdates[p] * particleForces[p];
         });
         
 		// Update grid weights

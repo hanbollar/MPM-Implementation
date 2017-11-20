@@ -189,15 +189,15 @@ namespace simulation {
 			}
 
 			// calculating gradWip with reference to a specific cell xi
-			Eigen::Array<T, Dimension, Dimension> calcGradWip(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) {
+			Eigen::Array<T, Dimension, 1> calcGradWip(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) const {
 				// here xp, xi have already been modified by origin but have not yet been divided by cellSize
 
 				Eigen::Array<T, Dimension, 1> index = indexInto(xp_modif, xi_modif, cellSize);
 
 				// calc weights for grid positions being checked
-				Eigen::Array<T, Dimension, Dimension>  calc = Eigen::Array<T, Dimension, Dimension>();
+				Eigen::Array<T, Dimension, 1>  calc = Eigen::Array<T, Dimension, 1>();
 				calc.fill(1.f);
-
+                
 				for (int d = 0; d < Dimension; ++d) {
 					for (int i_d = 0; i_d < Dimension; ++i_d) {
 						calc[d] *= (i_d == d) ? N_deriv(d, index[d]) : N(d, index[d]);
@@ -231,7 +231,7 @@ namespace simulation {
                 const ParticleSet &particleSet,
                 AttributeGrid &attributeGrid,
                 const Eigen::Array<T, Dimension, 1> &origin,
-                const std::function<void(unsigned int, float, const GridIndex&, const GridIndex&)> &func) {
+                const std::function<void(unsigned int, float, Eigen::Matrix<T, Dimension, 1>, const GridIndex&, const GridIndex&)> &func) {
 
             const auto& keyAttributes = particleSet.GetAttributeList<Key>(); // pos
             const auto& weightAttributes = particleSet.GetAttributeList<SimulationAttribute::Weights>();
@@ -246,9 +246,10 @@ namespace simulation {
 
                 ApplyOverKernel([&](const auto& index) {
                     Eigen::Array<float, Dimension, 1> gridLoc = baseNodeLoc + index.cast<float>() * cellSize;
-					float weightVal_calc = weights.calcWip(pLoc, gridLoc, cellSize);
+                    float weightVal_calc = weights.calcWip(pLoc, gridLoc, cellSize);
+                    Eigen::Matrix<T, Dimension, 1> weightVal_calc_grad = weights.calcGradWip(pLoc, gridLoc, cellSize).matrix();
 					Eigen::Array<unsigned int, Dimension, 1> gridCell = (gridLoc / cellSize).cast<unsigned int>();
-                    func(p, weightVal_calc, index, gridCell);
+                    func(p, weightVal_calc, weightVal_calc_grad, index, gridCell);
 				});
             });
         }
@@ -345,7 +346,6 @@ namespace simulation {
 
 				targetAttributes[p] = gridVal_weighted;
 			}); // end: looping through each particle
-
 		}
 
 	};

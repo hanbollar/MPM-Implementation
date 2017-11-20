@@ -17,7 +17,7 @@ template <typename SamplePrecision, typename Mesh>
 typename std::enable_if<
     std::is_base_of<geometry::MeshBase, Mesh>::value,
     std::vector<Eigen::Array<SamplePrecision, Mesh::kDimension, 1>>
->::type SampleMesh(const Mesh* mesh, SamplePrecision minDistance, RandomGenerator rng = RandomGenerator()) {
+>::type SampleMesh(const Mesh* mesh, SamplePrecision minDistance, float* outCoverage = nullptr, RandomGenerator rng = RandomGenerator()) {
 
     core::Optional<core::AxisAlignedBox<3, SamplePrecision>> boundingBox;
     for (const auto* geometry : mesh->geometries()) {
@@ -89,6 +89,10 @@ typename std::enable_if<
         }
 
         delete tree;
+    }
+
+    if (outCoverage) {
+        *outCoverage = static_cast<float>(hitCount) / static_cast<float>(samples.size());
     }
 
     std::cout << hitCount << " hits" << std::endl;
