@@ -104,8 +104,15 @@ simulation::AttributeGrid<kDimension, float, SimulationAttribute, AttributeDefin
     SimulationAttribute::Force
 > grid;
 
+float IS_IT_INSIDE_THIS_THING_OR_NOT (const Eigen::Matrix<float, kDimension, 1> pos_point, const Eigen::Matrix<float, kDimension, 1> pos_geometry, const Eigen::Matrix<float, kDimension, 1> norm_geometry) {
+    // Assume planes
+    Eigen::Matrix<float, kDimension, 1> vec = (pos_point - pos_geometry);
+    vec.normalize();
+    return (float) std::signbit(vec.dot(norm_geometry));
+}
+
 void Loop(display::Viewport::Window* window) {
-    window->Init(640, 480);
+    window->Init(1280, 720); // originally 640, 480
     CameraControls<float> controls(camera, window->GetGLFWWindow());
     controls.SetCurrent();
 
@@ -208,7 +215,7 @@ int main(int argc, char** argv) {
     camera.SetAspectRatio(640.f / 480.f);
     camera.SetFieldOfView(60.f * static_cast<float>(kPI) / 180.f);
     camera.SetNearFar(0.1f, 2000.f);
-    camera.SetDistance(1.5f * largestLength);
+    camera.SetDistance(2.5f * largestLength);
     camera.Rotate(-70.f * static_cast<float>(kPI) / 180.f, 0);
 
     using GridIndex = Eigen::Array<unsigned int, kDimension, 1>;
@@ -217,6 +224,9 @@ int main(int argc, char** argv) {
     Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 2.f;
     Eigen::Array<float, kDimension, 1> gridOrigin = (boundingBox->max() + boundingBox->min()) / 2.f - gridSize / 2.f;
     grid.Resize(2.f / density, gridSize);
+
+    const float gridCellSize = grid.CellSize();
+    const Eigen::Matrix<float, kDimension, 1> gridDims = { gridSize[0] / gridCellSize, gridSize[1] / gridCellSize, gridSize[2] / gridCellSize };
     
     // Generate samples inside the mesh
     float coverage;
@@ -242,7 +252,7 @@ int main(int argc, char** argv) {
     // Initialize particle velocities to 0
     auto& particleVelocities = particles.GetAttributeList<SimulationAttribute::Velocity>();
     core::VectorUtils::ApplyOverElements(particleVelocities, [](auto& velocity) {
-        velocity = { 0, 0, 0 };
+        velocity = { 10, 10, 0 };
     });
 
     // Initialize particle forces to 0
@@ -349,7 +359,7 @@ int main(int argc, char** argv) {
         /******* TODO: Uncomment this once you figure out how to check for grid boundary  ****/
         // AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, GridIndex offset, GridIndex i) {
         //     auto* gridPosition   = gridPositions.at(i);
-        //     auto* gridVelocities = gridVelocities.at(i); 
+        //     auto* gridVelocities = gridVelocities.at(i);
 
         //     // if grid location exits in grid then alter it
         //     if (gridPosition && outOfBounds(gridPosition)) {
@@ -375,6 +385,61 @@ int main(int argc, char** argv) {
             gridVelocities[i][1] -= 9.80665 * stepSize;
         });
 
+        // Collisions
+
+        // Iterate over each plane making up the grid
+        // yes, this will double-count some grid cells on the border of two planes (the edges of the grid)
+        // currently implenents an inelastic bounce
+
+        // X-planes
+        for (unsigned int z = 0; z < (unsigned int)std::round(gridDims[2]); ++z) {
+            for (unsigned int y = 0; y < (unsigned int)std::round(gridDims[1]); ++y) {
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { 0, y, z };
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { static_cast<unsigned int>(std::round(gridDims[0])) - 1, y, z };
+
+                if (gridVelocities[index3D_min][0] < 0.f) {
+                    gridVelocities[index3D_min][0] = 0.f;
+                }
+
+                if (gridVelocities[index3D_max][0] > 0.f) {
+                    gridVelocities[index3D_max][0] = 0.f;
+                }
+            }
+        }
+
+        // Y-planes
+        for (unsigned int x = 0; x < (unsigned int)std::round(gridDims[0]); ++x) {
+            for (unsigned int z = 0; z < (unsigned int)std::round(gridDims[2]); ++z) {
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { x, 0, z };
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, static_cast<unsigned int>(std::round(gridDims[1])) - 1, z };
+
+                if (gridVelocities[index3D_min][1] < 0.f) {
+                    gridVelocities[index3D_min][1] = 0.f;
+                }
+
+                if (gridVelocities[index3D_max][1] > 0.f) {
+                    gridVelocities[index3D_max][1] = 0.f;
+                }
+            }
+        }
+
+        // Z-planes
+        for (unsigned int x = 0; x < (unsigned int)std::round(gridDims[0]); ++x) {
+            for (unsigned int y = 0; y < (unsigned int)std::round(gridDims[1]); ++y) {
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { x, y, 0 };
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, y, static_cast<unsigned int>(std::round(gridDims[2])) - 1 };
+
+                if (gridVelocities[index3D_min][2] < 0.f) {
+                    gridVelocities[index3D_min][2] = 0.f;
+                }
+
+                if (gridVelocities[index3D_max][2] > 0.f) {
+                    gridVelocities[index3D_max][2] = 0.f;
+                }
+            }
+        }
+
+
         /***************************
         ****************************
         ******* Grid2Particle ******
@@ -385,6 +450,17 @@ int main(int argc, char** argv) {
         // Velocity
         AttributeTransfer::GridToParticle<SimulationAttribute::Velocity>(grid, gridOrigin, particles);
         //AttributeTransfer::GridToParticle<SimulationAttribute::Position>(grid, gridOrigin, particles);
+
+        // Collision check
+        /*core::VectorUtils::ApplyOverIndices(particleVelocities, [&](unsigned int p) {
+            // Check the 6 planes of the grid for collision
+            for (int i = 0; i < 6; ++i) {
+                const Plane & currPlane = gridBoundingPlanes[i];
+                
+                // Apply slipping, no frictions
+                particleVelocities[p] *= (-1.f) * IS_IT_INSIDE_THIS_THING_OR_NOT(particlePositions[p], currPlane.pos, currPlane.nor); // this is slippery: currPlane.nor * (particlePositions[p] - currPlane.pos).dot(currPlane.nor) * IS_IT_INSIDE_THIS_THING_OR_NOT(particlePositions[p], currPlane.pos, currPlane.nor);
+            }
+        });*/
 
         // Update positions
         core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
