@@ -39,6 +39,7 @@ enum class SimulationAttribute {
 	Weights,
     Force,
     DeformationUpdate,
+    Stress,
 };
 
 // Configure attribute transfer to transfer by position
@@ -73,6 +74,11 @@ struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Mass> {
 template <>
 struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Force> {
     using type = Eigen::Matrix<float, kDimension, 1>;
+};
+
+template <>
+struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Stress> {
+    using type = Eigen::Matrix<float, kDimension, kDimension>;
 };
 
 template <>
@@ -366,6 +372,11 @@ int main(int argc, char** argv) {
         //         *gridVelocity = 0;
         //     }
         // });
+
+        auto& particleStresses = particles.GetAttributeList<SimulationAttribute::Stress>();
+        core::VectorUtils::ApplyOverIndices(particleStresses, [&](unsigned int p) {
+            Eigen::JacobiSVD<Eigen::Matrix<float, kDimension, kDimension>> svd(particleForces[p], Eigen::ComputeThinU | Eigen::ComputeThinV);
+        });
 
         AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Matrix<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
             auto* gridForce = gridForces.at(i);
