@@ -312,7 +312,7 @@ int main(int argc, char** argv) {
 
         // Replaced by loop below
         // AttributeTransfer::ParticleToGrid<SimulationAttribute::Velocity>(particles, grid, gridOrigin);
-        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Array<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
+        AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Matrix<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
             auto* gridVelocity = gridVelocities.at(i);
             auto* gridMass = gridMasses.at(i);
 
