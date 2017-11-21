@@ -16,12 +16,12 @@ namespace simulation {
         class WeightVals {
 
         public:
-            Eigen::Array<float, Dimension, 3> N;
-            Eigen::Array<float, Dimension, 3> N_deriv;
+            Eigen::Array<T, Dimension, 3> N;
+            Eigen::Array<T, Dimension, 3> N_deriv;
 
             WeightVals() :
-                N(Eigen::Array<float, Dimension, 3>()),
-                N_deriv(Eigen::Array<float, Dimension, 3>()) {}
+                N(Eigen::Array<T, Dimension, 3>()),
+                N_deriv(Eigen::Array<T, Dimension, 3>()) {}
 
             // N: used for wip
             // N': used for gradWip
@@ -54,7 +54,7 @@ namespace simulation {
             static bool withinTest(Eigen::Array<T, Dimension, 1> v) {
 
                 for (int i = 0; i < 3; ++i) {
-                    float val = v[i];
+                    T val = v[i];
 
                     bool valid = (val < 2 || floatEquals(val, 2)) && (val > -2 || floatEquals(val, -2));
                     if (!valid) {
@@ -65,9 +65,9 @@ namespace simulation {
             }
 
             // N for particle grid location
-            void calcN(int i, int j, float component) {
+            void calcN(int i, int j, T component) {
 
-                float x = abs(component);
+                T x = abs(component);
 
                 /*
                 // linear
@@ -78,17 +78,17 @@ namespace simulation {
                 */
 
                 // quadratic
-                float first = 0.75f - pow(x, 2.f);
-                float second = 0.5f * pow((1.5f - x), 2.f);
+                T first = 0.75f - pow(x, 2.f);
+                T second = 0.5f * pow((1.5f - x), 2.f);
 
                 N(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5f && x < 1.5f) ? second : 0);
 
             }
 
             // N' for particle to grid location
-            void calcN_deriv(int i, int j, float component) {
+            void calcN_deriv(int i, int j, T component) {
 
-                float x = abs(component);
+                T x = abs(component);
 
                 /*
                 // linear
@@ -108,7 +108,7 @@ namespace simulation {
             }
 
             // indexing helper to get N or N' value from appropriate arrays
-            static Eigen::Array<T, Dimension, 1> indexInto(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) {
+            static Eigen::Array<T, Dimension, 1> indexInto(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, T cellSize) {
 
                 Eigen::Array<T, Dimension, 1> scaled = ((xp_modif - xi_modif) / cellSize);
                 Eigen::Array<T, Dimension, 1> index = Eigen::Array<T, Dimension, 1>();
@@ -117,7 +117,7 @@ namespace simulation {
                 withinTest(scaled);
 
                 for (int i = 0; i < Dimension; ++i) {
-                    float val = scaled[i];
+                    T val = scaled[i];
 
                     index[i] = (val > 0.f || floatEquals(val, 0.f)) ? ((val > 1.f || floatEquals(val, 1.f) ) ? 0 : 1) : 2;
                 }
@@ -127,8 +127,8 @@ namespace simulation {
 
         public:
 
-            static bool floatEquals(float a, float b) {
-                float epsilon = 0.000005f;
+            static bool floatEquals(T a, T b) {
+                T epsilon = 0.000005;
                 return (fabs(a - b) < epsilon);
             }
 
@@ -136,16 +136,12 @@ namespace simulation {
                 return xp - origin;
             }
 
-            static Eigen::Array<T, Dimension, 1> baseNodeLoc(Eigen::Array < T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin, float cellSize) {
-                Eigen::Array<float, Dimension, 1> base = Eigen::Array<float, Dimension, 1>();
-                for (int d = 0; d < Dimension; ++d) {
-                    base[d] = floor((xp[d] - origin[d]) / cellSize) - 1.f;
-                }
-                return base * cellSize;
+            static Eigen::Array<T, Dimension, 1> baseNodeLoc(Eigen::Array < T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin, T cellSize) {
+                return ((xp - origin - 0.5 * cellSize) / cellSize).floor() * cellSize;
             }
 
             // calc N and N' values for curr particle positions
-            void fillWeights(Eigen::Array<T, Dimension, 1> xp, float cellSize, const Eigen::Array<T, Dimension, 1> &origin) {
+            void fillWeights(Eigen::Array<T, Dimension, 1> xp, T cellSize, const Eigen::Array<T, Dimension, 1> &origin) {
                 // here xp, xi are orig values (no modifications)
 
                 // location of lower left hand node [ie if grid system is of cellSize 1, and point p is at 2,2 then
@@ -173,23 +169,22 @@ namespace simulation {
             }
 
             // calculating Wip with reference to a specific cell xi
-            float calcWip(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) const {
+            T calcWip(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, T cellSize) const {
                 // here xp, xi have already been modified by origin but have not yet been divided by cellSize
 
                 Eigen::Array<T, Dimension, 1> index = indexInto(xp_modif, xi_modif, cellSize);
 
                 // calc weights for grid positions being checked
-                float val = 1.f;
+                T val = 1.f;
                 for (int i = 0; i < Dimension; ++i) {
-                    float temp = N(i, index[i]);
+                    T temp = N(i, index[i]);
                     val *= N(i, index[i]);
                 }
 
                 return val;
             }
-
             // calculating gradWip with reference to a specific cell xi
-            Eigen::Array<T, Dimension, 1> calcGradWip(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, float cellSize) const {
+            Eigen::Array<T, Dimension, 1> calcGradWip(Eigen::Array<T, Dimension, 1> xp_modif, Eigen::Array<T, Dimension, 1> xi_modif, T cellSize) const {
                 // here xp, xi have already been modified by origin but have not yet been divided by cellSize
 
                 Eigen::Array<T, Dimension, 1> index = indexInto(xp_modif, xi_modif, cellSize);
@@ -207,6 +202,25 @@ namespace simulation {
                 calc /= cellSize;
 
                 return calc;
+            }
+
+            T getWeight(const Eigen::Array<unsigned int, Dimension, 1> &index) const {
+                T val = static_cast<T>(1);
+                for (unsigned int i = 0; i < Dimension; ++i) {
+                    val *= N(i, index[i]);
+                }
+                return val;
+            }
+
+            Eigen::Matrix<T, Dimension, 1> getWeightGradient(const Eigen::Array<unsigned int, Dimension, 1> &index, T cellSize) const {
+                Eigen::Array<T, Dimension, 1> grad = Eigen::Array<T, Dimension, 1>::Ones();
+                for (unsigned int d = 0; d < Dimension; ++d) {
+                    for (unsigned int i_d = 0; i_d < Dimension; ++i_d) {
+                        grad[d] *= (i_d == d) ? N_deriv(d, index[d]) : N(d, index[d]);
+                    }
+                }
+                grad /= cellSize;
+                return grad.matrix();
             }
 
         };
@@ -231,7 +245,7 @@ namespace simulation {
                 const ParticleSet &particleSet,
                 AttributeGrid &attributeGrid,
                 const Eigen::Array<T, Dimension, 1> &origin,
-                const std::function<void(unsigned int, float, Eigen::Matrix<T, Dimension, 1>, const GridIndex&, const GridIndex&)> &func) {
+                const std::function<void(unsigned int, T, Eigen::Matrix<T, Dimension, 1>, const GridIndex&, const GridIndex&)> &func) {
 
             const auto& keyAttributes = particleSet.GetAttributeList<Key>(); // pos
             const auto& weightAttributes = particleSet.GetAttributeList<SimulationAttribute::Weights>();
@@ -245,109 +259,12 @@ namespace simulation {
                 Eigen::Array<T, Dimension, 1> pLoc = WeightVals::particleLoc(key, origin);
 
                 ApplyOverKernel([&](const auto& index) {
-                    Eigen::Array<float, Dimension, 1> gridLoc = baseNodeLoc + index.cast<float>() * cellSize;
-                    float weightVal_calc = weights.calcWip(pLoc, gridLoc, cellSize);
-                    Eigen::Matrix<T, Dimension, 1> weightVal_calc_grad = weights.calcGradWip(pLoc, gridLoc, cellSize).matrix();
+                    Eigen::Array<T, Dimension, 1> gridLoc = baseNodeLoc + index.cast<T>() * cellSize;
                     Eigen::Array<unsigned int, Dimension, 1> gridCell = (gridLoc / cellSize).cast<unsigned int>();
-                    func(p, weightVal_calc, weightVal_calc_grad, index, gridCell);
+                    func(p, weights.getWeight(index), weights.getWeightGradient(index, cellSize), index, gridCell);
                 });
             });
         }
-
-        template <Attribute A, typename ParticleSet, typename AttributeGrid>
-        static void ParticleToGrid(const ParticleSet &particleSet, AttributeGrid &attributeGrid, const Eigen::Array<T, Dimension, 1> &origin) {
-
-            const auto& keyAttributes = particleSet.GetAttributeList<Key>(); // pos
-            const auto& sourceAttributes = particleSet.GetAttributeList<A>(); // attribute
-            const auto& weightAttributes = particleSet.GetAttributeList<SimulationAttribute::Weights>();
-            auto& targetGrid = attributeGrid.GetGrid<A>();
-
-            auto cellSize = attributeGrid.CellSize();
-
-            core::VectorUtils::ApplyOverIndices(keyAttributes, [&](unsigned int p) {
-                auto& key = keyAttributes[p];
-                auto& sourceVal = sourceAttributes[p];
-                auto weights = weightAttributes[p];
-
-                // location of lower left hand node [ie if grid system is of cellSize 1, and point p is at 2,2 then
-                // this node at 0, 0
-                Eigen::Array<T, Dimension, 1> baseNodeLoc = WeightVals::baseNodeLoc(key, origin, cellSize);
-                Eigen::Array<T, Dimension, 1> pLoc = WeightVals::particleLoc(key, origin);
-
-                // iterating gridLoc for particle
-                Eigen::Array<float, Dimension, 1> gridLoc = Eigen::Array<float, Dimension, 1>();
-                gridLoc.fill(0.f);
-
-                float sumWeights = 0.f;
-
-                ApplyOverKernel([&](const auto& index) {
-                    gridLoc = baseNodeLoc + index.cast<float>() * cellSize;
-
-                    auto weightVal_calc = weights.calcWip(pLoc, gridLoc, cellSize);
-
-                    sumWeights += weightVal_calc;
-
-                    Eigen::Array<unsigned int, Dimension, 1> checkLoc = (gridLoc / cellSize).cast<unsigned int>();
-                    auto* gridAttributeAtLoc = targetGrid.at(checkLoc);
-
-                    // if grid location exits in grid then alter it
-                    if (gridAttributeAtLoc) {
-                        *gridAttributeAtLoc += sourceVal * weightVal_calc;
-                    }
-                });
-
-                // -- turn this check back on once we have bounds to prohibit our particles from stepping out of the grid box
-                //if ( !(WeightVals::floatEquals(sumWeights, 1.f)) ) {
-                //	throw;
-                //}
-            }); // end: looping through each particle
-
-        }
-
-        // G2P
-        template <Attribute A, typename ParticleSet, typename AttributeGrid>
-        static void GridToParticle(const AttributeGrid &attributeGrid, const Eigen::Array<T, Dimension, 1> &origin, ParticleSet &particleSet) {
-
-            const auto& keyAttributes = particleSet.GetAttributeList<Key>(); // pos
-            auto& targetAttributes = particleSet.GetAttributeList<A>(); // attribute
-            using TargetType = std::remove_reference<decltype(targetAttributes[0])>::type;
-            const auto& weightAttributes = particleSet.GetAttributeList<SimulationAttribute::Weights>();
-            const auto& sourceGrid = attributeGrid.GetGrid<A>();
-
-            //int cellSize_int = static_cast<unsigned int>(attributeGrid.CellSize());
-            auto cellSize = attributeGrid.CellSize();
-
-            core::VectorUtils::ApplyOverIndices(keyAttributes, [&](unsigned int p) {
-                auto& key = keyAttributes[p];
-                auto weights = weightAttributes[p];
-
-                // location of lower left hand node [ie if grid system is of cellSize 1, and point p is at 2,2 then
-                // this node at 0, 0
-                Eigen::Array<T, Dimension, 1> baseNodeLoc = WeightVals::baseNodeLoc(key, origin, cellSize);
-                Eigen::Array<T, Dimension, 1> pLoc = WeightVals::particleLoc(key, origin);
-
-                // iterating gridLoc for particle
-                Eigen::Array<float, Dimension, 1> gridLoc = Eigen::Array<float, Dimension, 1>();
-                gridLoc.fill(0.f);
-
-                TargetType gridVal_weighted;// Eigen::Array<float, Dimension, 1>();
-                gridVal_weighted.fill(0.f);
-
-                ApplyOverKernel([&](const auto& index) {
-                    gridLoc = baseNodeLoc + index.cast<float>() * cellSize;
-
-                    Eigen::Array<unsigned int, Dimension, 1> checkLoc = (gridLoc / cellSize).cast<unsigned int>();
-                    auto* gridAttributeAtLoc = sourceGrid.at(checkLoc);
-                    // if grid location exits in grid then alter particle val based on grid val
-                    if (gridAttributeAtLoc) {
-                        gridVal_weighted += *gridAttributeAtLoc * weights.calcWip(pLoc, gridLoc, cellSize);
-                    }
-                });
-
-                targetAttributes[p] = gridVal_weighted;
-            }); // end: looping through each particle
-        }
-
     };
 
 
