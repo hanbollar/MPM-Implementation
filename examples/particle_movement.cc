@@ -124,6 +124,13 @@ float IS_IT_INSIDE_THIS_THING_OR_NOT (const Eigen::Matrix<float, kDimension, 1> 
     return (float) std::signbit(vec.dot(norm_geometry));
 }
 
+// HARD-CODED for 3D:
+template <int i, int j>
+auto minorDet(const Eigen::Matrix<float, kDimension, kDimension> &m) {
+    return m(i == 0 ? 1 : 0, j == 0 ? 1 : 0) * m(i == kDimension - 1 ? i - 1 : kDimension - 1, j == kDimension - 1 ? j - 1 : kDimension - 1)
+         - m(i == 0 ? 1 : 0, j == kDimension - 1 ? j - 1 : kDimension - 1) * m(i == kDimension - 1 ? i - 1 : kDimension - 1, j == 0 ? 1 : 0);
+};
+
 void Loop(display::Viewport::Window* window) {
     window->Init(1280, 720); // originally 640, 480
     CameraControls<float> controls(camera, window->GetGLFWWindow());
@@ -364,7 +371,13 @@ int main(int argc, char** argv) {
             constexpr float mu = E / (2 * (1 + V));
             constexpr float lambda = E * V / ( (1 + V) * (1 - 2*V) );
 
-            Eigen::Matrix<float, kDimension, kDimension> jFInvTranspose = F.adjoint().eval().transpose();
+            // HARD-CODED for 3D:
+            Eigen::Matrix<float, kDimension, kDimension> jFInvTranspose;
+            jFInvTranspose <<
+                 minorDet<0, 0>(F), -minorDet<0, 1>(F),  minorDet<0, 2>(F),
+                -minorDet<1, 0>(F),  minorDet<1, 1>(F), -minorDet<1, 2>(F),
+                 minorDet<2, 0>(F), -minorDet<2, 1>(F),  minorDet<2, 2>(F);
+
             stress = 2 * mu * (F - R) + lambda * (J - 1) * jFInvTranspose;
             if (std::isnan((stress)(0, 0)) || std::isnan((stress)(1, 0)) || std::isnan((stress)(2, 0))) {
                 throw;
