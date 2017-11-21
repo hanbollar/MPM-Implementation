@@ -244,9 +244,6 @@ int main(int argc, char** argv) {
     Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 1.5f;
     Eigen::Array<float, kDimension, 1> gridOrigin = (boundingBox->max() + boundingBox->min()) / 2.f - gridSize / 2.f;
     grid.Resize(2.f / density, gridSize);
-
-    const float gridCellSize = grid.CellSize();
-    const Eigen::Matrix<float, kDimension, 1> gridDims = { gridSize[0] / gridCellSize, gridSize[1] / gridCellSize, gridSize[2] / gridCellSize };
     
     // Generate samples inside the mesh
     float coverage;
@@ -410,11 +407,12 @@ int main(int argc, char** argv) {
         // yes, this will double-count some grid cells on the border of two planes (the edges of the grid)
         // currently implenents an inelastic bounce
 
+        auto gridVelocityDims = gridVelocities.GetSizes();
         // X-planes
-        for (unsigned int z = 0; z < (unsigned int)std::round(gridDims[2]); ++z) {
-            for (unsigned int y = 0; y < (unsigned int)std::round(gridDims[1]); ++y) {
+        for (unsigned int z = 0; z < gridVelocityDims[2]; ++z) {
+            for (unsigned int y = 0; y < gridVelocityDims[1]; ++y) {
                 const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { 0, y, z };
-                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { static_cast<unsigned int>(std::round(gridDims[0])) - 1, y, z };
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { gridVelocityDims[0] - 1, y, z };
 
                 if (gridVelocities[index3D_min][0] < 0.f) {
                     gridVelocities[index3D_min][0] = 0.f;
@@ -427,10 +425,10 @@ int main(int argc, char** argv) {
         }
 
         // Y-planes
-        for (unsigned int x = 0; x < (unsigned int)std::round(gridDims[0]); ++x) {
-            for (unsigned int z = 0; z < (unsigned int)std::round(gridDims[2]); ++z) {
+        for (unsigned int x = 0; x < gridVelocityDims[0]; ++x) {
+            for (unsigned int z = 0; z < gridVelocityDims[2]; ++z) {
                 const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { x, 0, z };
-                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, static_cast<unsigned int>(std::round(gridDims[1])) - 1, z };
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, gridVelocityDims[1] - 1, z };
 
                 if (gridVelocities[index3D_min][1] < 0.f) {
                     gridVelocities[index3D_min][1] = 0.f;
@@ -443,10 +441,10 @@ int main(int argc, char** argv) {
         }
 
         // Z-planes
-        for (unsigned int x = 0; x < (unsigned int)std::round(gridDims[0]); ++x) {
-            for (unsigned int y = 0; y < (unsigned int)std::round(gridDims[1]); ++y) {
+        for (unsigned int x = 0; x < gridVelocityDims[0]; ++x) {
+            for (unsigned int y = 0; y < gridVelocityDims[1]; ++y) {
                 const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { x, y, 0 };
-                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, y, static_cast<unsigned int>(std::round(gridDims[2])) - 1 };
+                const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, y, gridVelocityDims[2] - 1 };
 
                 if (gridVelocities[index3D_min][2] < 0.f) {
                     gridVelocities[index3D_min][2] = 0.f;
