@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
     // Initialize a grid to twice the size of the bounding box
     Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 1.5f;
     Eigen::Array<float, kDimension, 1> gridOrigin = (boundingBox->max() + boundingBox->min()) / 2.f - gridSize / 2.f;
-    grid.Resize(largestLength / density / std::sqrt(kDimension), gridSize);
+    grid.Resize(2.f / density, gridSize);
 
     // Generate samples inside the mesh
     float coverage;
@@ -266,7 +266,7 @@ int main(int argc, char** argv) {
     std::cout << "Particle mass: " << initialParticleVolume * 1000.f << std::endl;
     auto& particleMasses = particles.GetAttributeList<SimulationAttribute::Mass>();
     core::VectorUtils::ApplyOverElements(particleMasses, [&](auto& mass) {
-        mass = initialParticleVolume * 1000.f;
+        mass = 1.f;// initialParticleVolume * 1000.f;
     });
 
     // Initialize particle velocities to 0
@@ -285,12 +285,6 @@ int main(int argc, char** argv) {
     auto& particlePositions = particles.GetAttributeList<SimulationAttribute::Position>();
     core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
         particlePositions[p] = samples[p].matrix();
-    });
-
-	// Initialize grid weights for each particle
-    auto& particleWeights = particles.GetAttributeList<SimulationAttribute::Weights>();
-    core::VectorUtils::ApplyOverIndices(particleWeights, [&](unsigned int p) {
-        particleWeights[p].fillWeights(particlePositions[p], grid.CellSize(), gridOrigin);
     });
 
     // Initialize grid forces to 0
@@ -312,7 +306,7 @@ int main(int argc, char** argv) {
 
     // Step simulation until the viewport closes
     unsigned int step = 0;
-    unsigned int substeps = 1;
+    unsigned int substeps = 4;
     float stepSize = simulationTimestep.count() / 1000 / static_cast<float>(substeps);
     while (!viewport->GetWindow()->ShouldClose()) {
         auto start = std::chrono::system_clock::now();
@@ -321,6 +315,13 @@ int main(int argc, char** argv) {
             auto& gridVelocities = grid.GetGrid<SimulationAttribute::Velocity>();
             auto& gridForces = grid.GetGrid<SimulationAttribute::Force>();
             auto& gridMasses = grid.GetGrid<SimulationAttribute::Mass>();
+
+
+            // Update grid weights
+            auto& particleWeights = particles.GetAttributeList<SimulationAttribute::Weights>();
+            core::VectorUtils::ApplyOverIndices(particleWeights, [&](unsigned int p) {
+                particleWeights[p].fillWeights(particlePositions[p], grid.CellSize(), gridOrigin);
+            });
 
             /***************************
             ****************************
@@ -370,16 +371,36 @@ int main(int argc, char** argv) {
                 auto J = F.determinant();
                 Eigen::JacobiSVD<Eigen::Matrix<double, kDimension, kDimension>> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
                 Eigen::Matrix<double, kDimension, kDimension> U = svd.matrixU();
+                Eigen::Matrix<double, kDimension, 1> Sigma = svd.singularValues();
                 Eigen::Matrix<double, kDimension, kDimension> V = svd.matrixV();
+
+                Eigen::Matrix<double, kDimension, 1> temp;
+                for (unsigned int i = 1; i < Sigma.size(); ++i) {
+                    for (unsigned int j = i; j > 0 && Sigma(j - 1, 0) < Sigma(j, 0); j--) {
+                        std::swap(Sigma(j, 0), Sigma(j - 1, 0));
+                        
+                        temp = U.row(j);
+                        U.row(j) = U.row(j - 1);
+                        U.row(j - 1) = temp;
+
+                        temp = V.row(j);
+                        V.row(j) = V.row(j - 1);
+                        V.row(j - 1) = temp;
+                    }
+                }
+
                 if (U.determinant() < 0) {
                     U.col(kDimension - 1) *= -1;
+                    Sigma(kDimension - 1, 0) *= -1;
                 }
                 if (V.determinant() < 0) {
                     V.col(kDimension - 1) *= -1;
+                    Sigma(kDimension - 1, 0) *= -1;
                 }
+
                 Eigen::Matrix<double, kDimension, kDimension> R = U * V;
 
-                constexpr double YoungsModulus = 4;
+                constexpr double YoungsModulus = 1;
                 constexpr double PoissonRatio = 0.33;
                 constexpr double mu = YoungsModulus / (2 * (1 + PoissonRatio));
                 constexpr double lambda = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
@@ -387,11 +408,18 @@ int main(int argc, char** argv) {
                 // HARD-CODED for 3D:
                 Eigen::Matrix<double, kDimension, kDimension> jFInvTranspose;
                 jFInvTranspose <<
-                    minorDet<0, 0>(F), -minorDet<0, 1>(F), minorDet<0, 2>(F),
-                    -minorDet<1, 0>(F), minorDet<1, 1>(F), -minorDet<1, 2>(F),
-                    minorDet<2, 0>(F), -minorDet<2, 1>(F), minorDet<2, 2>(F);
+                     minorDet<0, 0>(F), -minorDet<0, 1>(F),  minorDet<0, 2>(F),
+                    -minorDet<1, 0>(F),  minorDet<1, 1>(F), -minorDet<1, 2>(F),
+                     minorDet<2, 0>(F), -minorDet<2, 1>(F),  minorDet<2, 2>(F);
 
-                stress = 2 * mu * (F - R) + lambda * (J - 1) * jFInvTranspose;
+                stress = 2 * mu * (F - R) + lambda * (J - 1) * jFInvTranspose; // corotated
+                // stress = mu * F + jFInvTranspose * (lambda * log(J) - mu) / J; // neo-hookean
+                // Eigen::Array<double, kDimension, 1> logSigma = Sigma.array().log();
+                // auto diag = ((2 * mu * logSigma + lambda * logSigma.sum()) / Sigma.array()); // st vernant kirchoof
+                // stress = Eigen::Matrix<double, kDimension, kDimension>::Identity();
+                // for (unsigned int d = 0; d < kDimension; ++d) {
+                //     stress(d, d) = diag[d];
+                // }
             });
 
             AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Matrix<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
@@ -509,11 +537,6 @@ int main(int argc, char** argv) {
             });
             core::VectorUtils::ApplyOverIndices(particleDeformations, [&](unsigned int p) {
                 particleDeformations[p] += deformationUpdates[p] * particleDeformations[p];
-            });
-
-            // Update grid weights
-            core::VectorUtils::ApplyOverIndices(particleWeights, [&](unsigned int p) {
-                particleWeights[p].fillWeights(particlePositions[p], grid.CellSize(), gridOrigin);
             });
         }
 

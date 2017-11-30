@@ -101,7 +101,7 @@ namespace simulation {
 
                 //quadratic
                 auto first = -2.0f * x;
-                auto second = -1.5f + x;
+                auto second = -1.0f + x;
 
                 N_deriv(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
 
@@ -138,6 +138,11 @@ namespace simulation {
 
             static Eigen::Array<T, Dimension, 1> baseNodeLoc(Eigen::Array < T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin, T cellSize) {
                 return ((xp - origin - 0.5 * cellSize) / cellSize).floor() * cellSize;
+                //Eigen::Array<float, Dimension, 1> base = Eigen::Array<float, Dimension, 1>();
+                //for (int d = 0; d < Dimension; ++d) {
+                //    base[d] = floor((xp[d] - origin[d]) / cellSize) - 1.f;
+                //}
+                //return base * cellSize;
             }
 
             // calc N and N' values for curr particle positions
@@ -148,6 +153,7 @@ namespace simulation {
                 // this node at 0, 0]
                 auto pLoc = particleLoc(xp, origin);
                 auto baseNode = baseNodeLoc(xp, origin, cellSize);
+                Eigen::Array<T, Dimension, 1> offset = (pLoc - baseNode) / cellSize;
 
                 // calc weights for grid positions being checked
                 for (int i = 0; i < Dimension; ++i) {
@@ -156,13 +162,33 @@ namespace simulation {
                     auto tempGridLoc = baseNode;
                     for (int j = 0; j < 3; ++j) {
 
-                        tempGridLoc[i] = baseNode[i] + j * cellSize;
+                        //tempGridLoc[i] = baseNode[i] + j * cellSize;
 
-                        Eigen::Array<T, Dimension, 1> scaled = (pLoc - tempGridLoc) / cellSize;
-                        withinTest(scaled);
+                        //Eigen::Array<T, Dimension, 1> scaled = (pLoc - tempGridLoc) / cellSize;
+                        //withinTest(scaled);
 
-                        calcN(i, j, scaled[i]);
-                        calcN_deriv(i, j, scaled[i]);
+
+                        //T x = scaled[i] < 0 ? -scaled[i] : scaled[i];
+
+                        T x = offset[i] - j;
+                        x = x < 0 ? -x : x;
+
+                        if (x < 0.5f) {
+                            N(i, j) = 0.75f - pow(x, 2.f);
+                            N_deriv(i, j) = -2.0f * x;
+                        } else if (x < 1.5f) {
+                            N(i, j) = 0.5f * pow((1.5f - x), 2.f);
+                            N_deriv(i, j) = -1.0f * x;
+                        } else {
+                            N(i, j) = 0.f;
+                            N_deriv(i, j) = 0.f;
+                        }
+
+                        //N(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5f && x < 1.5f) ? second : 0);
+                        //N_deriv(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
+
+                        //calcN(i, j, scaled[i]);
+                        //calcN_deriv(i, j, scaled[i]);
                     }
                 }
 
@@ -262,6 +288,7 @@ namespace simulation {
                     Eigen::Array<T, Dimension, 1> gridLoc = baseNodeLoc + index.cast<T>() * cellSize;
                     Eigen::Array<unsigned int, Dimension, 1> gridCell = (gridLoc / cellSize).cast<unsigned int>();
                     func(p, weights.getWeight(index), weights.getWeightGradient(index, cellSize), index, gridCell);
+                    //func(p, weights.calcWip(pLoc, gridLoc, cellSize), weights.calcGradWip(pLoc, gridLoc, cellSize), index, gridCell);
                 });
             });
         }
