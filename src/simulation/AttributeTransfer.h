@@ -136,13 +136,14 @@ namespace simulation {
                 return xp - origin;
             }
 
+            static Eigen::Array<unsigned int, Dimension, 1> baseNode(Eigen::Array < T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin, T cellSize) {
+                // return (((xp - origin) / cellSize).floor() - 1).cast<unsigned int>();
+                return ((xp - origin - cellSize * 0.5) / cellSize).floor().cast<unsigned int>();
+            }
+
             static Eigen::Array<T, Dimension, 1> baseNodeLoc(Eigen::Array < T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin, T cellSize) {
-                return ((xp - origin - 0.5 * cellSize) / cellSize).floor() * cellSize;
-                //Eigen::Array<float, Dimension, 1> base = Eigen::Array<float, Dimension, 1>();
-                //for (int d = 0; d < Dimension; ++d) {
-                //    base[d] = floor((xp[d] - origin[d]) / cellSize) - 1.f;
-                //}
-                //return base * cellSize;
+                // return (((xp - origin) / cellSize).floor() - 1) * cellSize;
+                return ((xp - origin - cellSize * 0.5) / cellSize).floor() * cellSize;
             }
 
             // calc N and N' values for curr particle positions
@@ -153,42 +154,27 @@ namespace simulation {
                 // this node at 0, 0]
                 auto pLoc = particleLoc(xp, origin);
                 auto baseNode = baseNodeLoc(xp, origin, cellSize);
-                Eigen::Array<T, Dimension, 1> offset = (pLoc - baseNode) / cellSize;
+                Eigen::Array<T, Dimension, 1> baseNodeOffset = (pLoc - baseNode) / cellSize;
 
-                // calc weights for grid positions being checked
+                // for each dimension
                 for (int i = 0; i < Dimension; ++i) {
 
-                    // iterating temp location on grid nodes
-                    auto tempGridLoc = baseNode;
+                    // for each step of the kernel
                     for (int j = 0; j < 3; ++j) {
+                        // distance (in cells) to the jth node in the ith dimension
+                        T x = baseNodeOffset[i] - j;
+                        T absX = std::abs(x);
 
-                        //tempGridLoc[i] = baseNode[i] + j * cellSize;
-
-                        //Eigen::Array<T, Dimension, 1> scaled = (pLoc - tempGridLoc) / cellSize;
-                        //withinTest(scaled);
-
-
-                        //T x = scaled[i] < 0 ? -scaled[i] : scaled[i];
-
-                        T x = offset[i] - j;
-                        x = x < 0 ? -x : x;
-
-                        if (x < 0.5f) {
-                            N(i, j) = 0.75f - pow(x, 2.f);
+                        if (absX < 0.5f) {
+                            N(i, j) = 0.75f - pow(absX, 2.f);
                             N_deriv(i, j) = -2.0f * x;
-                        } else if (x < 1.5f) {
-                            N(i, j) = 0.5f * pow((1.5f - x), 2.f);
-                            N_deriv(i, j) = -1.0f * x;
+                        } else if (absX < 1.5f) {
+                            N(i, j) = 0.5f * pow((1.5f - absX), 2.f);
+                            N_deriv(i, j) = x - 1.5f * (x < 0 ? -1 : 1);
                         } else {
                             N(i, j) = 0.f;
                             N_deriv(i, j) = 0.f;
                         }
-
-                        //N(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5f && x < 1.5f) ? second : 0);
-                        //N_deriv(i, j) = (x >= 0.0f && x < 0.5f) ? first : ((x >= 0.5 && x < 1.5f) ? second : 0);
-
-                        //calcN(i, j, scaled[i]);
-                        //calcN_deriv(i, j, scaled[i]);
                     }
                 }
 
@@ -281,13 +267,15 @@ namespace simulation {
                 auto& key = keyAttributes[p];
                 auto& weights = weightAttributes[p];
 
-                Eigen::Array<T, Dimension, 1> baseNodeLoc = WeightVals::baseNodeLoc(key, origin, cellSize);
-                Eigen::Array<T, Dimension, 1> pLoc = WeightVals::particleLoc(key, origin);
+                //Eigen::Array<T, Dimension, 1> baseNodeLoc = WeightVals::baseNodeLoc(key, origin, cellSize);
+                //Eigen::Array<T, Dimension, 1> pLoc = WeightVals::particleLoc(key, origin);
+                Eigen::Array<unsigned int, Dimension, 1> baseNode = WeightVals::baseNode(key, origin, cellSize);
 
                 ApplyOverKernel([&](const auto& index) {
-                    Eigen::Array<T, Dimension, 1> gridLoc = baseNodeLoc + index.cast<T>() * cellSize;
-                    Eigen::Array<unsigned int, Dimension, 1> gridCell = (gridLoc / cellSize).cast<unsigned int>();
-                    func(p, weights.getWeight(index), weights.getWeightGradient(index, cellSize), index, gridCell);
+                    // Eigen::Array<T, Dimension, 1> gridLoc = baseNodeLoc + index.cast<T>() * cellSize;
+                    // Eigen::Array<unsigned int, Dimension, 1> gridCell = (gridLoc / cellSize).cast<unsigned int>();
+                    // func(p, weights.getWeight(index), weights.getWeightGradient(index, cellSize), index, gridCell);
+                    func(p, weights.getWeight(index), weights.getWeightGradient(index, cellSize), index, baseNode + index);
                     //func(p, weights.calcWip(pLoc, gridLoc, cellSize), weights.calcGradWip(pLoc, gridLoc, cellSize), index, gridCell);
                 });
             });

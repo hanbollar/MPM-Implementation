@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
     // Initialize a grid to twice the size of the bounding box
     Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 1.5f;
     Eigen::Array<float, kDimension, 1> gridOrigin = (boundingBox->max() + boundingBox->min()) / 2.f - gridSize / 2.f;
-    grid.Resize(2.f / density, gridSize);
+    grid.Resize(largestLength / density / std::sqrt(kDimension), gridSize);
 
     // Generate samples inside the mesh
     float coverage;
@@ -254,19 +254,21 @@ int main(int argc, char** argv) {
 
     auto extent = boundingBox->max() - boundingBox->min();
     float initialParticleVolume = extent[0] * extent[1] * extent[2] * coverage / static_cast<float>(samples.size());
-    std::cout << "Particle bounding box: " << extent.transpose() << std::endl;
+    std::cout << "Particle bounding box: " << extent.transpose() << " m" << std::endl;
 
-    std::cout << "Particle volume: " << initialParticleVolume << std::endl;
+    std::cout << "Particle volume: " << initialParticleVolume << " m^3" << std::endl;
     auto& particleVolumes = particles.GetAttributeList<SimulationAttribute::InitialVolume>();
     core::VectorUtils::ApplyOverElements(particleVolumes, [&](auto& particleVolume) {
         particleVolume = initialParticleVolume;
     });
 
-    // Initialize particle masses to 1
-    std::cout << "Particle mass: " << initialParticleVolume * 1000.f << std::endl;
+    float particleDensity = 1.f;
+    std::cout << "Particle density: " << particleDensity << " kg / m^3" << std::endl;
+    float particleMass = initialParticleVolume * particleDensity;
+    std::cout << "Particle mass: " << particleMass << " kg" << std::endl;
     auto& particleMasses = particles.GetAttributeList<SimulationAttribute::Mass>();
     core::VectorUtils::ApplyOverElements(particleMasses, [&](auto& mass) {
-        mass = 1.f;// initialParticleVolume * 1000.f;
+        mass = particleMass;
     });
 
     // Initialize particle velocities to 0
@@ -298,6 +300,27 @@ int main(int argc, char** argv) {
      gridMasses.ApplyOverCells([&](auto& gridMass) {
          gridMass = 0.f;
      });
+
+     {
+         // Just get an initial count of number of particles in each cell
+         AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, float weight, Eigen::Matrix<float, kDimension, 1> weightGrad, GridIndex offset, GridIndex i) {
+             auto* gridMass = gridMasses.at(i);
+             if (gridMass) {
+                 *gridMass += 1.0;
+             }
+         });
+
+         float count = 0.f;
+         float cells = 0.f;
+         // Reset masses back to zero
+         gridMasses.ApplyOverCells([&](auto& gridMass) {
+             count += gridMass;
+             cells++;
+             gridMass = 0.f;
+         });
+
+         std::cout << count / cells << " particles per cell" << std::endl;
+     }
 
     // Wait in case the viewport has not yet been initialized
     while (!viewport->GetWindow()->IsInitialized()) {
@@ -378,7 +401,7 @@ int main(int argc, char** argv) {
                 for (unsigned int i = 1; i < Sigma.size(); ++i) {
                     for (unsigned int j = i; j > 0 && Sigma(j - 1, 0) < Sigma(j, 0); j--) {
                         std::swap(Sigma(j, 0), Sigma(j - 1, 0));
-                        
+
                         temp = U.row(j);
                         U.row(j) = U.row(j - 1);
                         U.row(j - 1) = temp;
