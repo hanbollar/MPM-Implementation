@@ -10,7 +10,7 @@ namespace simulation {
 
 template <unsigned int Dimension, typename T, typename Attribute, typename AttributeDefinitions, Attribute... Attributes>
 class AttributeGrid {
-    using AttributeStorage = AttributeStorage<Attribute, Attributes...>;
+    using AttributeStorage_ = AttributeStorage<Attribute, Attributes...>;
     using Storage = std::tuple<core::MultiGrid<typename AttributeDefinitions::template AttributeInfo<Attributes>::type, Dimension>...>;
 
     public:
@@ -22,7 +22,7 @@ class AttributeGrid {
 
         void Resize(T cellSize, const Eigen::Array<T, Dimension, 1> &sizes) {
             this->cellSize = cellSize;
-            AttributeStorage::ForEach(this->storage, [&](auto& grid, unsigned int) {
+            AttributeStorage_::ForEach(this->storage, [&](auto& grid, unsigned int) {
                 using Grid = typename std::remove_reference<decltype(grid)>::type;
                 typename Grid::Index index;
                 for (unsigned int i = 0; i < Dimension; ++i) {
@@ -34,12 +34,12 @@ class AttributeGrid {
 
         template <Attribute A>
         decltype(auto) GetGrid() {
-            return std::get<AttributeStorage::AttributeToIndex<A>::value>(storage);
+            return std::get<AttributeStorage_::template AttributeToIndex<A>::value>(storage);
         }
 
         template <Attribute A>
         decltype(auto) GetGrid() const {
-            return std::get<AttributeStorage::AttributeToIndex<A>::value>(storage);
+            return std::get<AttributeStorage_::template AttributeToIndex<A>::value>(storage);
         }
 
         T CellSize() const {

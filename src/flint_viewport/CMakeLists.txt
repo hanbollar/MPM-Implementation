@@ -25,6 +25,7 @@ if(UNIX AND NOT APPLE)
         ${X11_Xrandr_LIB}
         ${X11_Xi_LIB}
         ${X11_Xinerama_LIB}
+        dl
     )
 endif()
 

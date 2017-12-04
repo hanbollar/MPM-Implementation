@@ -2,6 +2,7 @@
 #pragma once
 
 #include <map>
+#include <cstring>
 #include <glad/glad.h>
 
 class Shader {

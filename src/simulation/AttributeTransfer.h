@@ -29,7 +29,7 @@ namespace simulation {
 
             static Eigen::Array<unsigned int, Dimension, 1> baseNode(Eigen::Array < T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin, T cellSize) {
                 // return (((xp - origin) / cellSize).floor() - 1).cast<unsigned int>();
-                return ((xp - origin - cellSize * 0.5) / cellSize).floor().cast<unsigned int>();
+                return ((xp - origin - cellSize * 0.5) / cellSize).floor().template cast<unsigned int>();
             }
 
             static Eigen::Array<T, Dimension, 1> baseNodeLoc(Eigen::Array < T, Dimension, 1> xp, const Eigen::Array<T, Dimension, 1> &origin, T cellSize) {
@@ -44,10 +44,10 @@ namespace simulation {
                 Eigen::Array<T, Dimension, 1> baseNodeOffset = (pLoc - baseNode) / cellSize;
 
                 // for each dimension
-                for (int i = 0; i < Dimension; ++i) {
+                for (uint32_t i = 0; i < Dimension; ++i) {
 
                     // for each step of the kernel
-                    for (int j = 0; j < 3; ++j) {
+                    for (uint32_t j = 0; j < 3; ++j) {
                         // distance (in cells) to the jth node in the ith dimension
                         T x = baseNodeOffset[i] - j;
                         T absX = std::abs(x);
@@ -110,13 +110,10 @@ namespace simulation {
                 const Eigen::Array<T, Dimension, 1> &origin,
                 const std::function<void(unsigned int, const GridIndex&, const GridIndex&)> &func) {
 
-            const auto& keyAttributes = particleSet.GetAttributeList<Key>();
-            auto cellSize = attributeGrid.CellSize();
-
+            const auto& keyAttributes = particleSet.template GetAttributeList<Key>();
             core::VectorUtils::ApplyOverIndices(keyAttributes, [&](unsigned int p) {
                 auto& key = keyAttributes[p];
-
-                Eigen::Array<unsigned int, Dimension, 1> baseNode = WeightVals::baseNode(key, origin, cellSize);
+                Eigen::Array<unsigned int, Dimension, 1> baseNode = WeightVals::baseNode(key, origin, attributeGrid.CellSize());
                 ApplyOverKernel([&](const auto& offset) {
                     func(p, offset, baseNode + offset);
                 });

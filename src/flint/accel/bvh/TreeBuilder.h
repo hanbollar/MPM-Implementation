@@ -40,9 +40,9 @@ private:
         constexpr float kEpsilon = 0.99f;
 
         // Get a bounding box of all object centroids
-        bound_t centroidBound = Merge<TreeBuilder::kDimension, float>(core::Optional<bound_t>(), objectInfos[begin].centroid);
+        bound_t centroidBound = core::Merge<TreeBuilder::kDimension, float>(core::Optional<bound_t>(), objectInfos[begin].centroid);
         for (unsigned int i = begin + 1; i < end; ++i) {
-            Merge<TreeBuilder::kDimension, float>(centroidBound, objectInfos[i].centroid);
+            core::Merge<TreeBuilder::kDimension, float>(centroidBound, objectInfos[i].centroid);
         }
 
         *axisPtr = centroidBound.GreatestExtent();
@@ -60,7 +60,7 @@ private:
 					kBinCount * kEpsilon * (objectInfos[i].centroid[axis] - centroidBound.min(axis)) /
 					(centroidBound.max(axis) - centroidBound.min(axis))
 				);
-                Merge<TreeBuilder::kDimension, float>(binBounds_[bin], objectInfos[i].bound);
+                core::Merge<TreeBuilder::kDimension, float>(binBounds_[bin], objectInfos[i].bound);
             }
 
             // Compute the cost of each bin split
@@ -69,9 +69,9 @@ private:
                 core::Optional<bound_t> upper_;
                 for (unsigned int b = 0; b < kBinCount; ++b) {
                     if (b <= s) {
-                        Merge<TreeBuilder::kDimension, float>(lower_, binBounds_[b]);
+                        core::Merge<TreeBuilder::kDimension, float>(lower_, binBounds_[b]);
                     } else {
-                        Merge<TreeBuilder::kDimension, float>(upper_, binBounds_[b]);
+                        core::Merge<TreeBuilder::kDimension, float>(upper_, binBounds_[b]);
                     }
                 }
 
@@ -159,7 +159,7 @@ private:
             for (unsigned int i = 0; i < L; ++i) {
                 if (begin + i < end) {
                     node->objects[i] = objectInfos[begin + i].object;
-                    Merge(bound, objectInfos[begin + i].bound);
+                    core::Merge(bound, objectInfos[begin + i].bound);
                 } else {
                     node->objects[i] = nullptr;
                 }
@@ -174,7 +174,7 @@ private:
                 // Recursively build each section
                 node->children[i] = RecursiveBuild(partitions[i].first, partitions[i].second, objectInfos, nodeAllocator);
                 if (node->children[i]) {
-                    Merge(bound, node->children[i]->bound);
+                    core::Merge(bound, node->children[i]->bound);
                 }
             }
         }
@@ -237,7 +237,7 @@ private:
                     for (unsigned int i = 1; i < L; ++i) {
                         if (curr.begin + i < curr.end) {
                             node->objects[i] = objectInfos[curr.begin + i].object;
-                            Merge(node->bound, objectInfos[curr.begin + i].bound);
+                            core::Merge(node->bound, objectInfos[curr.begin + i].bound);
                         } else {
                             node->objects[i] = nullptr;
                         }
@@ -276,7 +276,7 @@ private:
                             constructed++;
 #endif
                         }
-                        Merge(parent->bound, parent->children[i]->bound);
+                        core::Merge(parent->bound, parent->children[i]->bound);
                     }
                 }
                 assert(initialized);

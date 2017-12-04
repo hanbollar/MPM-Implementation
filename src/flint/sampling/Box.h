@@ -24,7 +24,7 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
     }
 
     auto cellToGridIndex = [](const sample_cell_t &cell) {
-        core::MultiGrid<float, N>::Index index;
+        typename core::MultiGrid<float, N>::Index index;
         for (unsigned int i = 0; i < N; ++i) {
             index[i] = cell(i, 0);
         }
@@ -34,7 +34,7 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
     std::vector<sample_t> samples;
     std::vector<unsigned int> activeList;
 
-    core::MultiGrid<float, N>::Index backgroundGridSize = cellToGridIndex(gridSize);
+    typename core::MultiGrid<float, N>::Index backgroundGridSize = cellToGridIndex(gridSize);
     core::MultiGrid<float, N> backgroundGrid(backgroundGridSize);
     backgroundGrid.Fill(-1);
 
