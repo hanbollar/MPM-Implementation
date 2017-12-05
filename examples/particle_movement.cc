@@ -423,7 +423,7 @@ int main(int argc, char** argv) {
 
                 Eigen::Matrix<float, kDimension, kDimension> R = U * V;
 
-                constexpr float YoungsModulus = 1e2.f; // around 3e1 to 3e3
+                constexpr float YoungsModulus = static_cast<float>(1e2); // around 3e1 to 3e3
                 constexpr float PoissonRatio = 0.33f; // usually it's arround 0.3 - 0.4
                 constexpr float mu = YoungsModulus / (2 * (1 + PoissonRatio));
                 constexpr float lambda = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
