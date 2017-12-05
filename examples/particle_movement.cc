@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    float density = 30.f;
+    float density = 30.f; // usually the range is between 2e0 to 2e2
 
     if (argc >= 3) {
         density = stof(std::string(argv[2]));
@@ -423,8 +423,8 @@ int main(int argc, char** argv) {
 
                 Eigen::Matrix<float, kDimension, kDimension> R = U * V;
 
-                constexpr float YoungsModulus = 1.f;
-                constexpr float PoissonRatio = 0.33f;
+                constexpr float YoungsModulus = 1e2.f; // around 3e1 to 3e3
+                constexpr float PoissonRatio = 0.33f; // usually it's arround 0.3 - 0.4
                 constexpr float mu = YoungsModulus / (2 * (1 + PoissonRatio));
                 constexpr float lambda = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
 
@@ -452,7 +452,7 @@ int main(int argc, char** argv) {
             });
 
             gridVelocities.ApplyOverIndices([&](const auto& i) {
-                gridVelocities[i][1] -= 9.80665 * stepSize;
+                gridVelocities[i][1] -= 9.80665 * stepSize; // gravity -2
             });
 
             // Collisions
