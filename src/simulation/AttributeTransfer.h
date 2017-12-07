@@ -64,7 +64,6 @@ namespace simulation {
                         }
                     }
                 }
-
             }
 
             T getWeight(const Eigen::Array<unsigned int, Dimension, 1> &index) const {
@@ -97,23 +96,23 @@ namespace simulation {
             return core::StaticMultiGrid<unsigned int, (I, Dimension)...>();
         }
 
-        static const void ApplyOverKernel(const std::function<void(const GridIndex&)> &func) {
+        template <typename Function>
+        static const void ApplyOverKernel(const Function &func) {
             //static constexpr auto kernel = KernelGridImpl(std::make_index_sequence<Dimension>());
             static const auto kernel = core::StaticMultiGrid<unsigned int, Dimension, Dimension, Dimension>();
             kernel.ApplyOverIndices(func);
         }
 
-        template <typename ParticleSet, typename AttributeGrid>
+        template <typename ParticleSet, typename AttributeGrid, typename Function>
         static void IterateParticleKernel(
                 const ParticleSet &particleSet,
                 AttributeGrid &attributeGrid,
                 const Eigen::Array<T, Dimension, 1> &origin,
-                const std::function<void(unsigned int, const GridIndex&, const GridIndex&)> &func) {
+                const Function &func) {
 
             const auto& keyAttributes = particleSet.template GetAttributeList<Key>();
             core::VectorUtils::ApplyOverIndices(keyAttributes, [&](unsigned int p) {
-                auto& key = keyAttributes[p];
-                Eigen::Array<unsigned int, Dimension, 1> baseNode = WeightVals::baseNode(key, origin, attributeGrid.CellSize());
+                Eigen::Array<unsigned int, Dimension, 1> baseNode = WeightVals::baseNode(keyAttributes[p], origin, attributeGrid.CellSize());
                 ApplyOverKernel([&](const auto& offset) {
                     func(p, offset, baseNode + offset);
                 });

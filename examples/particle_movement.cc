@@ -244,6 +244,7 @@ int main(int argc, char** argv) {
     Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 1.5f;
     Eigen::Array<float, kDimension, 1> gridOrigin = (boundingBox->max() + boundingBox->min()) / 2.f - gridSize / 2.f;
     grid.Resize(largestLength / density / std::sqrt(kDimension), gridSize);
+    std::cout << "Cell size: " << grid.CellSize() << std::endl;
 
     // Generate samples inside the mesh
     float coverage;
@@ -262,7 +263,7 @@ int main(int argc, char** argv) {
         particleVolume = initialParticleVolume;
     });
 
-    float particleDensity = 1000.f;
+    float particleDensity = 100.f;
     std::cout << "Particle density: " << particleDensity << " kg / m^3" << std::endl;
     float particleMass = initialParticleVolume * particleDensity;
     std::cout << "Particle mass: " << particleMass << " kg" << std::endl;
@@ -328,17 +329,28 @@ int main(int argc, char** argv) {
     }
 
     // Step simulation until the viewport closes
-    unsigned int step = 0;
-    unsigned int substeps = 4;
-    float stepSize = simulationTimestep.count() / 1000.f / static_cast<float>(substeps);
+    unsigned int frame = 0;
+    unsigned int substeps = 16;
+    float CFL = 0.5f; // 0.1 - 1.0
+    float frameTime = simulationTimestep.count() / 1000.f;
+    float maxStepSize = frameTime / static_cast<float>(substeps);
     while (!viewport->GetWindow()->ShouldClose()) {
         auto start = std::chrono::system_clock::now();
 
-        for (unsigned int substep = 0; substep < substeps; ++substep) {
+        float stepElasped = 0.f;
+        while (stepElasped < frameTime) {
             auto& gridVelocities = grid.GetGrid<SimulationAttribute::Velocity>();
             auto& gridForces = grid.GetGrid<SimulationAttribute::Force>();
             auto& gridMasses = grid.GetGrid<SimulationAttribute::Mass>();
+            
+            float maxVelocity = 0.f;
+            gridVelocities.ApplyOverCells([&](const auto& gridVelocity) {
+                maxVelocity = std::max(maxVelocity, gridVelocity.norm());
+            });
 
+            float stepSize = std::min(maxStepSize, CFL * grid.CellSize() / maxVelocity);
+            std::cout << "dt: " << stepSize << std::endl;
+            stepElasped += stepSize;
 
             // Update grid weights
             auto& particleWeights = particles.GetAttributeList<SimulationAttribute::Weights>();
@@ -423,7 +435,7 @@ int main(int argc, char** argv) {
 
                 Eigen::Matrix<float, kDimension, kDimension> R = U * V;
 
-                constexpr float YoungsModulus = 1e2.f; // around 3e1 to 3e3
+                constexpr float YoungsModulus = 3000.f; // around 3e1 to 3e3
                 constexpr float PoissonRatio = 0.33f; // usually it's arround 0.3 - 0.4
                 constexpr float mu = YoungsModulus / (2 * (1 + PoissonRatio));
                 constexpr float lambda = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
@@ -435,14 +447,21 @@ int main(int argc, char** argv) {
                     -minorDet<1, 0>(F),  minorDet<1, 1>(F), -minorDet<1, 2>(F),
                      minorDet<2, 0>(F), -minorDet<2, 1>(F),  minorDet<2, 2>(F);
 
-                stress = 2 * mu * (F - R) + lambda * (J - 1) * jFInvTranspose; // corotated
+                
+                // stress = 2 * mu * (F - R);// +lambda * (J - 1) * jFInvTranspose; // corotated
+                stress = 2 * mu * (F - R) + lambda * (J - 1) * J * F.inverse().transpose();
             });
 
-            AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, GridIndex offset, GridIndex i) {
-                auto* gridForce = gridForces.at(i);
-                if (gridForce) {
-                    *gridForce -= particleVolumes[p] * particleStresses[p] * particleDeformations[p].transpose() * particleWeights[p].getWeightGradient(offset, grid.CellSize());
-                }
+            core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
+                Eigen::Array<unsigned int, kDimension, 1> baseNode = AttributeTransfer::WeightVals::baseNode(particlePositions[p], gridOrigin, grid.CellSize());
+                
+                Eigen::Matrix<float, kDimension, kDimension> m = particleVolumes[p] * particleStresses[p] * particleDeformations[p].transpose();
+                AttributeTransfer::ApplyOverKernel([&](const auto& offset) {
+                    auto* gridForce = gridForces.at(baseNode + offset);
+                    if (gridForce) {
+                        *gridForce -= m * particleWeights[p].getWeightGradient(offset, grid.CellSize());
+                    }
+                });
             });
 
             gridVelocities.ApplyOverIndices([&](const auto& i) {
@@ -558,10 +577,11 @@ int main(int argc, char** argv) {
 
         auto end = std::chrono::system_clock::now();
         auto elapsed = end - start;
+        std::cout << "frame " << frame << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << std::endl;
         if (elapsed < simulationTimestep) {
             std::this_thread::sleep_for(simulationTimestep - elapsed);
         }
-        step++;
+        frame++;
     }
 
     // Wait for the viewport thread to finish
