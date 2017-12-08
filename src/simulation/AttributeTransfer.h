@@ -95,8 +95,8 @@ namespace simulation {
 
         template <typename Function>
         static const void ApplyOverKernel(const Function &func) {
-            static const auto kernel = KernelGridImpl(std::make_index_sequence<Dimension>());
-            //static const auto kernel = core::StaticMultiGrid<unsigned int, Dimension, Dimension, Dimension>();
+            //static const auto kernel = KernelGridImpl(std::make_index_sequence<Dimension>());
+            static const auto kernel = core::StaticMultiGrid<unsigned int, Dimension, Dimension, Dimension>();
             kernel.ApplyOverIndices(func);
         }
 

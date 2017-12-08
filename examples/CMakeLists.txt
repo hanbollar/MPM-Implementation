@@ -5,6 +5,7 @@ list(APPEND EXAMPLE_LINK_LIBRARIES
     # png16
     flint
     flint_viewport
+	simulation
 )
 
 find_package(Threads REQUIRED)
