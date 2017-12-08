@@ -2,9 +2,9 @@
 #include <iostream>
 #include <algorithm>
 #include <Eigen/Dense>
+#include "flint/core/VectorUtils.h"
 #include "ParticleSet.h"
 #include "AttributeGrid.h"
-#include "AttributeTransfer.h"
 
 namespace simulation {
 namespace MPM {

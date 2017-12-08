@@ -21,7 +21,6 @@
 #include "flint_viewport/gl/ShaderProgram.h"
 #include "simulation/ParticleSet.h"
 #include "simulation/AttributeGrid.h"
-#include "simulation/AttributeTransfer.h"
 #include "simulation/MPMSimulation.h"
 
 using namespace core;
