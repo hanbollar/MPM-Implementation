@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <Eigen/Dense>
 #include "flint/core/VectorUtils.h"
+#include "flint/utility/Sequence.h"
 #include "ParticleSet.h"
 #include "AttributeGrid.h"
 
@@ -215,25 +216,9 @@ namespace MPM {
         T gravity = T(9.80665);
         T maxdt = T(1e-3);
 
-        template <unsigned int I>
-        struct KernelGridImpl {
-            template <unsigned int D, unsigned int... Ds>
-            static constexpr decltype(auto) Get(std::integer_sequence<unsigned int, D, Ds...>) {
-                return KernelGridImpl<I - 1>::Get(std::integer_sequence<unsigned int, D, D, Ds...>{});
-            }
-        };
-
-        template<>
-        struct KernelGridImpl<0> {
-            template <unsigned int D, unsigned int... Ds>
-            static constexpr decltype(auto) Get(std::integer_sequence<unsigned int, D, Ds...>) {
-                return core::StaticMultiGrid<unsigned int, Ds...>();
-            }
-        };
-
         template <typename Function>
         static const void ApplyOverKernel(const Function &func) {
-            static const auto kernel = KernelGridImpl<Dimension>::Get(std::integer_sequence<unsigned int, Dimension>{});
+            core::StaticMultiGridCube<unsigned int, Dimension, 3> kernel;
             kernel.ApplyOverIndices(func);
         }
 
@@ -389,13 +374,13 @@ namespace MPM {
                 }
             });
         }
-        
+
         template <int i, int j, typename Matrix>
         static auto minorDet(const Matrix &m) {
             return m(i == 0 ? 1 : 0, j == 0 ? 1 : 0) * m(i == Dimension - 1 ? i - 1 : Dimension - 1, j == Dimension - 1 ? j - 1 : Dimension - 1)
                  - m(i == 0 ? 1 : 0, j == Dimension - 1 ? j - 1 : Dimension - 1) * m(i == Dimension - 1 ? i - 1 : Dimension - 1, j == 0 ? 1 : 0);
         };
-        
+
         static Eigen::Matrix<T, 2, 2> ComputeJFInvTranspose(const Eigen::Matrix<T, 2, 2> &F) {
             Eigen::Matrix<T, 2, 2> result = Eigen::Matrix<T, 2, 2>::Zero();
             result(0, 0) = F(1, 1);

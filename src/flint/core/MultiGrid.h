@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include <Eigen/Dense>
+#include "flint/utility/Sequence.h"
 
 namespace core {
 
@@ -458,5 +459,15 @@ class StaticMultiGrid<T, Dimension> : public MultiGridBase<T, 1> {
             return Index(Dimension);
         }
 };
+
+namespace detail {
+    template <typename T, unsigned int... Dimensions>
+    constexpr decltype(auto) MakeStaticMultiGrid(std::integer_sequence<unsigned int, Dimensions...>) {
+        return StaticMultiGrid<T, Dimensions...>{};
+    }
+}
+
+template <typename T, unsigned int Dimension, unsigned int Size>
+using StaticMultiGridCube = decltype(detail::MakeStaticMultiGrid<T>(utility::RepeatedIntegerSequence<Dimension, unsigned int, Size>{}));
 
 }
