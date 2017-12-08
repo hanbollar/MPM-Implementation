@@ -41,6 +41,7 @@ enum class SimulationAttribute {
     DeformationUpdate,
     Deformation,
     Stress,
+    Momentum,
 };
 
 // Configure attribute transfer to transfer by position
@@ -97,6 +98,11 @@ struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Weights> {
 	using type = AttributeTransfer::WeightVals;
 };
 
+template <>
+struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Momentum> {
+    using type = Eigen::Matrix<float, kDimension, 1>;
+};
+
 // Declare the set of particle attributes
 simulation::ParticleSet<SimulationAttribute, AttributeDefinitions,
     SimulationAttribute::InitialVolume,
@@ -114,7 +120,8 @@ simulation::AttributeGrid<kDimension, float, SimulationAttribute, AttributeDefin
 	SimulationAttribute::Position,
     SimulationAttribute::Velocity,
 	SimulationAttribute::Mass,
-    SimulationAttribute::Force
+    SimulationAttribute::Force,
+    SimulationAttribute::Momentum
 > grid;
 
 float IS_IT_INSIDE_THIS_THING_OR_NOT (const Eigen::Matrix<float, kDimension, 1> pos_point, const Eigen::Matrix<float, kDimension, 1> pos_geometry, const Eigen::Matrix<float, kDimension, 1> norm_geometry) {
@@ -253,6 +260,16 @@ int main(int argc, char** argv) {
 
     particles.Resize(samples.size());
 
+    constexpr float CFL = 0.5f; // 0.1 - 1.0
+    constexpr float maxStepSize = 1e-3f;
+    constexpr float gravity = 9.80665f;
+    constexpr float YoungsModulus = 1000.f; // around 3e1 to 3e3
+    constexpr float PoissonRatio = 0.4f; // usually it's arround 0.3 - 0.4
+    constexpr float mu = YoungsModulus / (2 * (1 + PoissonRatio));
+    constexpr float lambda = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
+    constexpr float particleDensity = 30.f;
+    std::cout << "Particle density: " << particleDensity << " kg / m^3" << std::endl;
+
     auto extent = boundingBox->max() - boundingBox->min();
     float initialParticleVolume = extent[0] * extent[1] * extent[2] * coverage / static_cast<float>(samples.size());
     std::cout << "Particle bounding box: " << extent.transpose() << " m" << std::endl;
@@ -263,8 +280,6 @@ int main(int argc, char** argv) {
         particleVolume = initialParticleVolume;
     });
 
-    float particleDensity = 100.f;
-    std::cout << "Particle density: " << particleDensity << " kg / m^3" << std::endl;
     float particleMass = initialParticleVolume * particleDensity;
     std::cout << "Particle mass: " << particleMass << " kg" << std::endl;
     auto& particleMasses = particles.GetAttributeList<SimulationAttribute::Mass>();
@@ -288,6 +303,7 @@ int main(int argc, char** argv) {
     auto& particlePositions = particles.GetAttributeList<SimulationAttribute::Position>();
     core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
         particlePositions[p] = samples[p].matrix();
+        particlePositions[p][1] += (gridSize[1] - extent[1]) / 2.f - 2.f * grid.CellSize();
     });
 
     // Initialize grid forces to 0
@@ -330,224 +346,231 @@ int main(int argc, char** argv) {
 
     // Step simulation until the viewport closes
     unsigned int frame = 0;
-    unsigned int substeps = 16;
-    float CFL = 0.5f; // 0.1 - 1.0
     float frameTime = simulationTimestep.count() / 1000.f;
-    float maxStepSize = frameTime / static_cast<float>(substeps);
     while (!viewport->GetWindow()->ShouldClose()) {
         auto start = std::chrono::system_clock::now();
 
         float stepElasped = 0.f;
+        float maxParticleVelocity = 0.f;
         while (stepElasped < frameTime) {
             auto& gridVelocities = grid.GetGrid<SimulationAttribute::Velocity>();
+            auto& gridMomentums = grid.GetGrid<SimulationAttribute::Momentum>();
             auto& gridForces = grid.GetGrid<SimulationAttribute::Force>();
             auto& gridMasses = grid.GetGrid<SimulationAttribute::Mass>();
-            
-            float maxVelocity = 0.f;
-            gridVelocities.ApplyOverCells([&](const auto& gridVelocity) {
-                maxVelocity = std::max(maxVelocity, gridVelocity.norm());
-            });
 
-            float stepSize = std::min(maxStepSize, CFL * grid.CellSize() / maxVelocity);
-            std::cout << "dt: " << stepSize << std::endl;
-            stepElasped += stepSize;
-
-            // Update grid weights
             auto& particleWeights = particles.GetAttributeList<SimulationAttribute::Weights>();
+            auto& particleStresses = particles.GetAttributeList<SimulationAttribute::Stress>();
+            
+            // Update grid weights
             core::VectorUtils::ApplyOverIndices(particleWeights, [&](unsigned int p) {
                 particleWeights[p].fillWeights(particlePositions[p], grid.CellSize(), gridOrigin);
             });
 
-            /***************************
-            ****************************
-            ******* Patricle2Grid ******
-            ****************************
-            ****************************/
-
-            gridMasses.ApplyOverCells([](auto& gridMass) {
-                gridMass = 0.f;
+            maxParticleVelocity = 0.f;
+            core::VectorUtils::ApplyOverElements(particleVelocities, [&](const auto& particleVelocity) {
+                maxParticleVelocity = std::max(maxParticleVelocity, particleVelocity.norm());
             });
+            float stepSize = std::min(maxStepSize, CFL * grid.CellSize() / maxParticleVelocity);
 
-            gridVelocities.ApplyOverCells([](auto& gridVelocity) {
-                gridVelocity = AttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity>::type::Zero();
-            });
+            while (true) {
+                /***************************
+                ****************************
+                ******* Patricle2Grid ******
+                ****************************
+                ****************************/
 
-            gridForces.ApplyOverCells([](auto& gridForce) {
-                gridForce = AttributeDefinitions::AttributeInfo<SimulationAttribute::Force>::type::Zero();
-            });
+                gridMasses.Fill(0.f);
+                gridVelocities.Fill(AttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity>::type::Zero());
+                gridMomentums.Fill(AttributeDefinitions::AttributeInfo<SimulationAttribute::Momentum>::type::Zero());
+                gridForces.Fill(AttributeDefinitions::AttributeInfo<SimulationAttribute::Force>::type::Zero());
 
-            AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, GridIndex offset, GridIndex i) {
-                auto* gridMass = gridMasses.at(i);
-                if (gridMass) {
-                    *gridMass += particleMasses[p] * particleWeights[p].getWeight(offset);
-                }
-            });
-
-            AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, GridIndex offset, GridIndex i) {
-                auto* gridVelocity = gridVelocities.at(i);
-                auto* gridMass = gridMasses.at(i);
-
-                // if grid location exits in grid then alter it
-                if (gridVelocity && gridMass && fabs(*gridMass) >= 0.000001) {
-                    *gridVelocity += ((particleWeights[p].getWeight(offset) * particleMasses[p] * particleVelocities[p]) / *gridMass);
-                }
-            });
-
-            /***************************
-            ****************************
-            ***** UPDATE ATTRIBUTES ****
-            ****************************
-            ****************************/
-
-            auto& particleStresses = particles.GetAttributeList<SimulationAttribute::Stress>();
-            core::VectorUtils::ApplyOverIndices(particleStresses, [&](unsigned int p) {
-                auto& stress = particleStresses[p];
-                const auto& F = particleDeformations[p];
-                auto J = F.determinant();
-                Eigen::JacobiSVD<Eigen::Matrix<float, kDimension, kDimension>> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
-                Eigen::Matrix<float, kDimension, kDimension> U = svd.matrixU();
-                Eigen::Matrix<float, kDimension, 1> Sigma = svd.singularValues();
-                Eigen::Matrix<float, kDimension, kDimension> V = svd.matrixV();
-
-                Eigen::Matrix<float, kDimension, 1> temp;
-                for (unsigned int i = 1; i < Sigma.size(); ++i) {
-                    for (unsigned int j = i; j > 0 && Sigma(j - 1, 0) < Sigma(j, 0); j--) {
-                        std::swap(Sigma(j, 0), Sigma(j - 1, 0));
-
-                        temp = U.row(j);
-                        U.row(j) = U.row(j - 1);
-                        U.row(j - 1) = temp;
-
-                        temp = V.row(j);
-                        V.row(j) = V.row(j - 1);
-                        V.row(j - 1) = temp;
-                    }
-                }
-
-                if (U.determinant() < 0) {
-                    U.col(kDimension - 1) *= -1;
-                    Sigma(kDimension - 1, 0) *= -1;
-                }
-                if (V.determinant() < 0) {
-                    V.col(kDimension - 1) *= -1;
-                    Sigma(kDimension - 1, 0) *= -1;
-                }
-
-                Eigen::Matrix<float, kDimension, kDimension> R = U * V;
-
-                constexpr float YoungsModulus = 3000.f; // around 3e1 to 3e3
-                constexpr float PoissonRatio = 0.33f; // usually it's arround 0.3 - 0.4
-                constexpr float mu = YoungsModulus / (2 * (1 + PoissonRatio));
-                constexpr float lambda = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
-
-                // HARD-CODED for 3D:
-                Eigen::Matrix<float, kDimension, kDimension> jFInvTranspose;
-                jFInvTranspose <<
-                     minorDet<0, 0>(F), -minorDet<0, 1>(F),  minorDet<0, 2>(F),
-                    -minorDet<1, 0>(F),  minorDet<1, 1>(F), -minorDet<1, 2>(F),
-                     minorDet<2, 0>(F), -minorDet<2, 1>(F),  minorDet<2, 2>(F);
-
-                
-                // stress = 2 * mu * (F - R);// +lambda * (J - 1) * jFInvTranspose; // corotated
-                stress = 2 * mu * (F - R) + lambda * (J - 1) * J * F.inverse().transpose();
-            });
-
-            core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
-                Eigen::Array<unsigned int, kDimension, 1> baseNode = AttributeTransfer::WeightVals::baseNode(particlePositions[p], gridOrigin, grid.CellSize());
-                
-                Eigen::Matrix<float, kDimension, kDimension> m = particleVolumes[p] * particleStresses[p] * particleDeformations[p].transpose();
-                AttributeTransfer::ApplyOverKernel([&](const auto& offset) {
-                    auto* gridForce = gridForces.at(baseNode + offset);
-                    if (gridForce) {
-                        *gridForce -= m * particleWeights[p].getWeightGradient(offset, grid.CellSize());
+                AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, GridIndex offset, GridIndex i) {
+                    auto* gridMass = gridMasses.at(i);
+                    auto* gridMomentum = gridMomentums.at(i);
+                    if (gridMass && gridMomentum) {
+                        auto weight = particleWeights[p].getWeight(offset);
+                        *gridMass += weight * particleMasses[p];
+                        *gridMomentum += weight * particleMasses[p] * particleVelocities[p];
                     }
                 });
-            });
 
-            gridVelocities.ApplyOverIndices([&](const auto& i) {
-                if (fabs(gridMasses[i]) >= 0.000001) {
-                    gridVelocities[i] += (stepSize * gridForces[i] / gridMasses[i]);
-                }
-            });
+                gridVelocities.ApplyOverIndices([&](const auto& i) {
+                    if (gridMasses[i] > 0) {
+                        gridVelocities[i] = gridMomentums[i] / gridMasses[i];
+                    }
+                });
 
-            gridVelocities.ApplyOverIndices([&](const auto& i) {
-                gridVelocities[i][1] -= 9.80665 * stepSize; // gravity -2
-            });
+                /***************************
+                ****************************
+                ***** UPDATE ATTRIBUTES ****
+                ****************************
+                ****************************/
+                core::VectorUtils::ApplyOverIndices(particleStresses, [&](unsigned int p) {
+                    auto& stress = particleStresses[p];
+                    const auto& F = particleDeformations[p];
+                    auto J = F.determinant();
+                    Eigen::JacobiSVD<Eigen::Matrix<float, kDimension, kDimension>> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
+                    Eigen::Matrix<float, kDimension, kDimension> U = svd.matrixU();
+                    Eigen::Matrix<float, kDimension, 1> Sigma = svd.singularValues();
+                    Eigen::Matrix<float, kDimension, kDimension> V = svd.matrixV();
 
-            // Collisions
+                    Eigen::Matrix<float, kDimension, 1> temp;
+                    for (unsigned int i = 1; i < Sigma.size(); ++i) {
+                        for (unsigned int j = i; j > 0 && Sigma(j - 1, 0) < Sigma(j, 0); j--) {
+                            std::swap(Sigma(j, 0), Sigma(j - 1, 0));
 
-            // Iterate over each plane making up the grid
-            // yes, this will double-count some grid cells on the border of two planes (the edges of the grid)
-            // currently implenents an inelastic bounce
+                            temp = U.row(j);
+                            U.row(j) = U.row(j - 1);
+                            U.row(j - 1) = temp;
 
-            auto gridVelocityDims = gridVelocities.GetSizes();
-            // X-planes
-            for (unsigned int z = 0; z < gridVelocityDims[2]; ++z) {
-                for (unsigned int y = 0; y < gridVelocityDims[1]; ++y) {
-                    const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { 0, y, z };
-                    const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { gridVelocityDims[0] - 1, y, z };
-
-                    if (gridVelocities[index3D_min][0] < 0.f) {
-                        gridVelocities[index3D_min][0] = 0.f;
+                            temp = V.row(j);
+                            V.row(j) = V.row(j - 1);
+                            V.row(j - 1) = temp;
+                        }
                     }
 
-                    if (gridVelocities[index3D_max][0] > 0.f) {
-                        gridVelocities[index3D_max][0] = 0.f;
+                    if (U.determinant() < 0) {
+                        U.col(kDimension - 1) *= -1;
+                        Sigma(kDimension - 1, 0) *= -1;
                     }
-                }
-            }
+                    if (V.determinant() < 0) {
+                        V.col(kDimension - 1) *= -1;
+                        Sigma(kDimension - 1, 0) *= -1;
+                    }
 
-            // Y-planes
-            for (unsigned int x = 0; x < gridVelocityDims[0]; ++x) {
+                    assert(U.determinant() > 0);
+                    assert(V.determinant() > 0);
+                    auto _F = (U * Eigen::DiagonalMatrix<float, kDimension>(Sigma) * V.transpose()).eval();
+                    assert(((_F.array() - F.array()) < 1e-4).all());
+
+                    Eigen::Matrix<float, kDimension, kDimension> R = U * V.transpose();
+
+                    // HARD-CODED for 3D:
+                    Eigen::Matrix<float, kDimension, kDimension> jFInvTranspose;
+                    jFInvTranspose <<
+                         minorDet<0, 0>(F), -minorDet<0, 1>(F),  minorDet<0, 2>(F),
+                        -minorDet<1, 0>(F),  minorDet<1, 1>(F), -minorDet<1, 2>(F),
+                         minorDet<2, 0>(F), -minorDet<2, 1>(F),  minorDet<2, 2>(F);
+
+                    stress = 2 * mu * (F - R) + lambda * (J - 1) * jFInvTranspose; // corotated
+                });
+
+                core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
+                    Eigen::Array<unsigned int, kDimension, 1> baseNode = AttributeTransfer::WeightVals::baseNode(particlePositions[p], gridOrigin, grid.CellSize());
+                
+                    Eigen::Matrix<float, kDimension, kDimension> m = particleVolumes[p] * particleStresses[p] * particleDeformations[p].transpose();
+                    AttributeTransfer::ApplyOverKernel([&](const auto& offset) {
+                        auto* gridForce = gridForces.at(baseNode + offset);
+                        if (gridForce) {
+                            *gridForce -= m * particleWeights[p].getWeightGradient(offset, grid.CellSize());
+                        }
+                    });
+                });
+
+                gridVelocities.ApplyOverIndices([&](const auto& i) {
+                    if (gridMasses[i] > 0) {
+                        gridVelocities[i] += (stepSize * gridForces[i]) / gridMasses[i];
+                    }
+                });
+
+                gridVelocities.ApplyOverIndices([&](const auto& i) {
+                    gridVelocities[i][1] -= gravity * stepSize;
+                });
+
+                // Collisions
+
+                // Iterate over each plane making up the grid
+                // yes, this will double-count some grid cells on the border of two planes (the edges of the grid)
+                // currently implenents an inelastic bounce
+
+                auto gridVelocityDims = gridVelocities.GetSizes();
+                // X-planes
                 for (unsigned int z = 0; z < gridVelocityDims[2]; ++z) {
-                    const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { x, 0, z };
-                    const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, gridVelocityDims[1] - 1, z };
+                    for (unsigned int y = 0; y < gridVelocityDims[1]; ++y) {
+                        const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { 0, y, z };
+                        const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { gridVelocityDims[0] - 1, y, z };
 
-                    if (gridVelocities[index3D_min][1] < 0.f) {
-                        gridVelocities[index3D_min][1] = 0.f;
-                    }
+                        if (gridVelocities[index3D_min][0] < 0.f) {
+                            gridVelocities[index3D_min][0] = 0.f;
+                        }
 
-                    if (gridVelocities[index3D_max][1] > 0.f) {
-                        gridVelocities[index3D_max][1] = 0.f;
+                        if (gridVelocities[index3D_max][0] > 0.f) {
+                            gridVelocities[index3D_max][0] = 0.f;
+                        }
                     }
+                }
+
+                // Y-planes
+                for (unsigned int x = 0; x < gridVelocityDims[0]; ++x) {
+                    for (unsigned int z = 0; z < gridVelocityDims[2]; ++z) {
+                        const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { x, 0, z };
+                        const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, gridVelocityDims[1] - 1, z };
+
+                        if (gridVelocities[index3D_min][1] < 0.f) {
+                            gridVelocities[index3D_min][1] = 0.f;
+                        }
+
+                        if (gridVelocities[index3D_max][1] > 0.f) {
+                            gridVelocities[index3D_max][1] = 0.f;
+                        }
+                    }
+                }
+
+                // Z-planes
+                for (unsigned int x = 0; x < gridVelocityDims[0]; ++x) {
+                    for (unsigned int y = 0; y < gridVelocityDims[1]; ++y) {
+                        const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { x, y, 0 };
+                        const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, y, gridVelocityDims[2] - 1 };
+
+                        if (gridVelocities[index3D_min][2] < 0.f) {
+                            gridVelocities[index3D_min][2] = 0.f;
+                        }
+
+                        if (gridVelocities[index3D_max][2] > 0.f) {
+                            gridVelocities[index3D_max][2] = 0.f;
+                        }
+                    }
+                }
+
+
+                /***************************
+                ****************************
+                ******* Grid2Particle ******
+                ****************************
+                ****************************/
+
+                // Transfer back to particles
+                // Velocity
+                core::VectorUtils::ApplyOverElements(particleVelocities, [](auto &particleVelocity) {
+                    particleVelocity = AttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity>::type::Zero();
+                });
+
+                AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, GridIndex offset, GridIndex i) {
+                    auto* gridVelocity = gridVelocities.at(i);
+                    if (gridVelocity) {
+                        particleVelocities[p] += gridVelocities[i] * particleWeights[p].getWeight(offset);
+                    }
+                });
+
+                maxParticleVelocity = 0.f;
+                core::VectorUtils::ApplyOverElements(particleVelocities, [&](const auto& particleVelocity) {
+                    maxParticleVelocity = std::max(maxParticleVelocity, particleVelocity.norm());
+                });
+            
+                if (maxParticleVelocity * stepSize > grid.CellSize() * CFL) {
+                    float nextStep = std::min(maxStepSize, CFL * grid.CellSize() / maxParticleVelocity);
+                    if (nextStep / stepSize > 0.5) {
+                        stepSize *= 0.5;
+                    } else {
+                        stepSize = nextStep;
+                    }
+                } else {
+                    break;
                 }
             }
 
-            // Z-planes
-            for (unsigned int x = 0; x < gridVelocityDims[0]; ++x) {
-                for (unsigned int y = 0; y < gridVelocityDims[1]; ++y) {
-                    const Eigen::Array<unsigned int, kDimension, 1> index3D_min = { x, y, 0 };
-                    const Eigen::Array<unsigned int, kDimension, 1> index3D_max = { x, y, gridVelocityDims[2] - 1 };
-
-                    if (gridVelocities[index3D_min][2] < 0.f) {
-                        gridVelocities[index3D_min][2] = 0.f;
-                    }
-
-                    if (gridVelocities[index3D_max][2] > 0.f) {
-                        gridVelocities[index3D_max][2] = 0.f;
-                    }
-                }
-            }
-
-
-            /***************************
-            ****************************
-            ******* Grid2Particle ******
-            ****************************
-            ****************************/
-
-            // Transfer back to particles
-            // Velocity
-            core::VectorUtils::ApplyOverElements(particleVelocities, [](auto &particleVelocity) {
-                particleVelocity = AttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity>::type::Zero();
-            });
-
-            AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, GridIndex offset, GridIndex i) {
-                auto* gridVelocity = gridVelocities.at(i);
-                if (gridVelocity) {
-                    particleVelocities[p] += gridVelocities[i] * particleWeights[p].getWeight(offset);
-                }
-            });
+            stepElasped += stepSize;
+            std::cout << "dt: " << stepSize << std::endl;
 
             // Update positions
             core::VectorUtils::ApplyOverIndices(particlePositions, [&](unsigned int p) {
@@ -567,11 +590,11 @@ int main(int argc, char** argv) {
             AttributeTransfer::IterateParticleKernel(particles, grid, gridOrigin, [&](unsigned int p, GridIndex offset, GridIndex i) {
                 auto* gridVelocity = gridVelocities.at(i);
                 if (gridVelocity) {
-                    deformationUpdates[p] += stepSize * gridVelocities[i] * particleWeights[p].getWeightGradient(offset, grid.CellSize()).transpose();
+                    deformationUpdates[p] += gridVelocities[i] * particleWeights[p].getWeightGradient(offset, grid.CellSize()).transpose();
                 }
             });
             core::VectorUtils::ApplyOverIndices(particleDeformations, [&](unsigned int p) {
-                particleDeformations[p] += deformationUpdates[p] * particleDeformations[p];
+                particleDeformations[p] += stepSize * deformationUpdates[p] * particleDeformations[p];
             });
         }
 
