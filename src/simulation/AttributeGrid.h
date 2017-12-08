@@ -11,7 +11,7 @@ namespace simulation {
 template <unsigned int Dimension, typename T, typename Attribute, typename AttributeDefinitions, Attribute... Attributes>
 class AttributeGrid {
     using AttributeStorage_ = AttributeStorage<Attribute, Attributes...>;
-    using Storage = std::tuple<core::MultiGrid<typename AttributeDefinitions::template AttributeInfo<Attributes>::type, Dimension>...>;
+    using Storage = std::tuple<core::MultiGrid<typename AttributeDefinitions::template AttributeInfo<Attributes>::type, Dimension, 2>...>;
 
     public:
         AttributeGrid() { }

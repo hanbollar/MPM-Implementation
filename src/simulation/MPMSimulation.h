@@ -16,6 +16,7 @@ namespace MPM {
         Velocity,
         Mass,
         Weights,
+        KernelMask,
         Force,
         DeformationUpdate,
         Deformation,
@@ -159,6 +160,12 @@ namespace MPM {
         };
 
         template <>
+        struct AttributeDefinitions::AttributeInfo<SimulationAttribute::KernelMask> {
+            using type = core::StaticMultiGridCube<T, Dimension, 3>;
+            static type Default() { return {}; }
+        };
+
+        template <>
         struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Momentum> {
             using type = Eigen::Matrix<T, Dimension, 1>;
             static type Default() { return type::Zeros(); }
@@ -190,6 +197,7 @@ namespace MPM {
             SimulationAttribute::Velocity,
             SimulationAttribute::Mass,
             SimulationAttribute::Weights,
+            SimulationAttribute::KernelMask,
             SimulationAttribute::Deformation,
             SimulationAttribute::Stress,
             SimulationAttribute::mu,
@@ -297,9 +305,19 @@ namespace MPM {
         }
 
         T Step() {
-            auto& particleWeights = particles.GetAttributeList<SimulationAttribute::Weights>();
-            const auto& particlePositions = particles.GetAttributeList<SimulationAttribute::Position>();
-            const auto& particleVelocities = particles.GetAttributeList<SimulationAttribute::Velocity>();
+            auto& particleWeights = particles.Get<SimulationAttribute::Weights>();
+            const auto& particlePositions = particles.Get<SimulationAttribute::Position>();
+            const auto& particleVelocities = particles.Get<SimulationAttribute::Velocity>();
+            const auto& gridMasses = grid.Get<SimulationAttribute::Mass>();
+            auto& kernelMasks = particles.Get<SimulationAttribute::KernelMask>();
+
+            IterateParticleKernel([&](unsigned int p, const auto& offset, const auto& i) {
+                if (gridMasses.at(i)) {
+                    kernelMasks[p][offset] = T(1);
+                } else {
+                    kernelMasks[p][offset] = T(0);
+                }
+            });
 
             core::VectorUtils::ApplyOverIndices(particleWeights, [&](unsigned int p) {
                 particleWeights[p].fillWeights(particlePositions[p], grid.CellSize(), gridOrigin);
@@ -359,13 +377,9 @@ namespace MPM {
             gridForces.Fill(AttributeDefinitions::AttributeInfo<SimulationAttribute::Force>::type::Zero());
 
             IterateParticleKernel([&](unsigned int p, const auto& offset, const auto& i) {
-                auto* gridMass = gridMasses.at(i);
-                auto* gridMomentum = gridMomentums.at(i);
-                if (gridMass && gridMomentum) {
-                    auto weight = particleWeights[p].getWeight(offset);
-                    *gridMass += weight * particleMasses[p];
-                    *gridMomentum += weight * particleMasses[p] * particleVelocities[p];
-                }
+                auto weight = particleWeights[p].getWeight(offset);
+                gridMasses[i] += weight * particleMasses[p];
+                gridMomentums[i] += weight * particleMasses[p] * particleVelocities[p];
             });
 
             gridVelocities.ApplyOverIndices([&](const auto& i) {
@@ -456,10 +470,7 @@ namespace MPM {
 
                 Eigen::Matrix<T, Dimension, Dimension> m = particleVolumes[p] * particleStresses[p] * particleDeformations[p].transpose();
                 ApplyOverKernel([&](const auto& offset) {
-                    auto* gridForce = gridForces.at(baseNode + offset);
-                    if (gridForce) {
-                        *gridForce -= m * particleWeights[p].getWeightGradient(offset, grid.CellSize());
-                    }
+                    gridForces[baseNode + offset] -= m * particleWeights[p].getWeightGradient(offset, grid.CellSize());
                 });
             });
         }
@@ -500,16 +511,14 @@ namespace MPM {
             auto& particleVelocities = particles.Get<SimulationAttribute::Velocity>();
             const auto& particleWeights = particles.Get<SimulationAttribute::Weights>();
             const auto& gridVelocities = grid.Get<SimulationAttribute::Velocity>();
+            const auto& kernelMasks = particles.Get<SimulationAttribute::KernelMask>();
 
             core::VectorUtils::ApplyOverElements(particleVelocities, [](auto &particleVelocity) {
                 particleVelocity = AttributeDefinitions::AttributeInfo<SimulationAttribute::Velocity>::type::Zero();
             });
 
             IterateParticleKernel([&](unsigned int p, const auto& offset, const auto& i) {
-                auto* gridVelocity = gridVelocities.at(i);
-                if (gridVelocity) {
-                    particleVelocities[p] += gridVelocities[i] * particleWeights[p].getWeight(offset);
-                }
+                particleVelocities[p] += kernelMasks[p][offset] * gridVelocities[i] * particleWeights[p].getWeight(offset);
             });
         }
 
@@ -532,15 +541,13 @@ namespace MPM {
             auto& deformationUpdates = particles.Get<SimulationAttribute::DeformationUpdate>();
             const auto& particleWeights = particles.Get<SimulationAttribute::Weights>();
             const auto& gridVelocities = grid.Get<SimulationAttribute::Velocity>();
+            const auto& kernelMasks = particles.Get<SimulationAttribute::KernelMask>();
 
             core::VectorUtils::ApplyOverElements(deformationUpdates, [](auto& deformationUpdate) {
                 deformationUpdate = AttributeDefinitions::AttributeInfo<SimulationAttribute::DeformationUpdate>::type::Zero();
             });
             IterateParticleKernel([&](unsigned int p, const auto& offset, const auto& i) {
-                auto* gridVelocity = gridVelocities.at(i);
-                if (gridVelocity) {
-                    deformationUpdates[p] += gridVelocities[i] * particleWeights[p].getWeightGradient(offset, grid.CellSize()).transpose();
-                }
+                deformationUpdates[p] += kernelMasks[p][offset] * gridVelocities[i] * particleWeights[p].getWeightGradient(offset, grid.CellSize()).transpose();
             });
             core::VectorUtils::ApplyOverIndices(particleDeformations, [&](unsigned int p) {
                 particleDeformations[p] += dt * deformationUpdates[p] * particleDeformations[p];

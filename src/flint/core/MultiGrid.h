@@ -185,7 +185,7 @@ class MultiGridBase {
 
 };
 
-template <typename T, unsigned int Dimension>
+template <typename T, unsigned int Dimension, unsigned int Padding=0>
 class MultiGrid : public MultiGridBase<T, Dimension> {
 
 
@@ -199,7 +199,7 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
             unsigned int accum = 1;
             for (unsigned int d = 0; d < Dimension; ++d) {
                 strides[d] = accum;
-                accum *= sizes[d];
+                accum *= sizes[d] + 2 * Padding;
             }
             contents.resize(accum);
         }
@@ -208,7 +208,7 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
             unsigned int accum = 1;
             for (unsigned int d = 0; d < Dimension; ++d) {
                 strides[d] = accum;
-                accum *= sizes[d];
+                accum *= sizes[d] + 2 * Padding;
             }
             contents.resize(accum);
         }
@@ -263,7 +263,7 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
         std::vector<T> contents;
 
         unsigned int computeIndex(const Index &indices) const {
-            return (indices * strides).sum();
+            return ((indices + Padding) * strides).sum();
         }
 };
 
