@@ -186,7 +186,7 @@ class MultiGridBase {
 
 template <typename T, unsigned int Dimension>
 class MultiGrid : public MultiGridBase<T, Dimension> {
-    
+
 
     public:
         using Index = typename MultiGridBase<T, Dimension>::Index;
@@ -262,11 +262,7 @@ class MultiGrid : public MultiGridBase<T, Dimension> {
         std::vector<T> contents;
 
         unsigned int computeIndex(const Index &indices) const {
-            unsigned int index = 0;
-            for (unsigned int d = 0; d < Dimension; ++d) {
-                index += indices[d] * strides[d];
-            }
-            return index;
+            return (indices * strides).sum();
         }
 };
 

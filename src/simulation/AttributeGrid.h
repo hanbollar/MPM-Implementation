@@ -33,6 +33,16 @@ class AttributeGrid {
         }
 
         template <Attribute A>
+        decltype(auto) Get() {
+            return std::get<AttributeStorage_::template AttributeToIndex<A>::value>(storage);
+        }
+
+        template <Attribute A>
+        decltype(auto) Get() const {
+            return std::get<AttributeStorage_::template AttributeToIndex<A>::value>(storage);
+        }
+
+        template <Attribute A>
         decltype(auto) GetGrid() {
             return std::get<AttributeStorage_::template AttributeToIndex<A>::value>(storage);
         }

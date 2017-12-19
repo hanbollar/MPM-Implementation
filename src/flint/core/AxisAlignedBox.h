@@ -77,6 +77,14 @@ class AxisAlignedBox {
             return sa;
         }
 
+        T Volume() const {
+            T volume(1);
+            for (unsigned int d = 0; d < N; ++d) {
+                volume *= Extent(d);
+            }
+            return volume;
+        }
+
         AxisAlignedBox& Merge(const AxisAlignedBox &other) {
             auto lower = (other.min() < min()).template cast<float>();
             auto upper = (other.max() > max()).template cast<float>();

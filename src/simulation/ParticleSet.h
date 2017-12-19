@@ -26,6 +26,23 @@ class ParticleSet {
             AttributeStorage_::ForEach(this->storage, [&](auto& attributeList, unsigned int index) {
                 attributeList.resize(particleCount);
             });
+
+            int result[] = {0, ((void)std::fill(GetAttributeList<Attributes>().begin(), GetAttributeList<Attributes>().end(), AttributeDefinitions::template AttributeInfo<Attributes>::Default()), 0)... };
+        }
+
+        void Append(const ParticleSet& other) {
+            int result[] = { 0, ((void)GetAttributeList<Attributes>().insert(GetAttributeList<Attributes>().end(), other.GetAttributeList<Attributes>().begin(), other.GetAttributeList<Attributes>().end()), 0)... };
+            particleCount += other.Size();
+        }
+
+        template <Attribute A>
+        decltype(auto) Get() {
+            return std::get<AttributeStorage_::template AttributeToIndex<A>::value>(storage);
+        }
+
+        template <Attribute A>
+        decltype(auto) Get() const {
+            return std::get<AttributeStorage_::template AttributeToIndex<A>::value>(storage);
         }
 
         template <Attribute A>
