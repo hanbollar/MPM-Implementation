@@ -183,7 +183,7 @@ int main(int argc, char** argv) {
 
         auto end = std::chrono::system_clock::now();
         auto elapsed = end - start;
-        std::cout << "frame " << frame << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << std::endl;
+        //std::cout << "frame " << frame << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << std::endl;
         if (elapsed < simulationTimestep) {
             std::this_thread::sleep_for(simulationTimestep - elapsed);
         }

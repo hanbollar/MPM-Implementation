@@ -3,7 +3,7 @@
 
 #include <chrono>
 #include <random>
-#include "core/AxisAlignedBox.h"
+#include "core/AXisAlignedBox.h"
 #include "core/Math.h"
 #include "core/MultiGrid.h"
 #include "Random.h"

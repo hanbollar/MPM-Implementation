@@ -11,3 +11,4 @@ add_executable(flint_tests
 )
 add_dependencies(flint_tests googletest)
 target_link_libraries(flint_tests flint gtest)
+
