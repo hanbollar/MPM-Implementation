@@ -154,6 +154,7 @@ int main(int argc, char** argv) {
 
     sim.SetBounds(gridOrigin, gridOrigin + gridSize);
     sim.SetCellSize(cellSize);
+    sim.SetMaxdt(1e-4);
 
     simulation::MPM::MPMSimulation<float, kDimension>::ParticleSet particles;
     particles.Resize(samples.size());

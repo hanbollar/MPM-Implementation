@@ -20,7 +20,6 @@ namespace MPM {
         Deformation,
         Stress,
         Momentum,
-        Inertia, // The D matrix for APIC Simulation
         AffineState, // The B matrix for APIC Simulation
         mu,
         lambda
@@ -148,12 +147,6 @@ namespace MPM {
         };
 
         template <>
-        struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Inertia> {
-            using type = Eigen::Matrix<T, Dimension, Dimension>;
-            static type Default() { return type::Identity(); }
-        };
-
-        template <>
         struct AttributeDefinitions::AttributeInfo<SimulationAttribute::AffineState> {
             using type = Eigen::Matrix<T, Dimension, Dimension>;
             static type Default() { return type::Zero(); }
@@ -205,7 +198,6 @@ namespace MPM {
             SimulationAttribute::Weights,
             SimulationAttribute::Deformation,
             SimulationAttribute::Stress,
-            SimulationAttribute::Inertia,
             SimulationAttribute::AffineState,
             SimulationAttribute::mu,
             SimulationAttribute::lambda
@@ -383,8 +375,6 @@ namespace MPM {
             const auto& particleMasses = particles.Get<SimulationAttribute::Mass>();
             auto& particleVelocities = particles.Get<SimulationAttribute::Velocity>();
             const auto& particleWeights = particles.Get<SimulationAttribute::Weights>();
-            // Is updated in this step
-            auto& particleInertias = particles.Get<SimulationAttribute::Inertia>();
             const auto& particleAffineStates = particles.Get<SimulationAttribute::AffineState>();
             const auto& particlePositions = particles.Get<SimulationAttribute::Position>();
 
@@ -393,10 +383,7 @@ namespace MPM {
             gridMomentums.Fill(AttributeDefinitions::AttributeInfo<SimulationAttribute::Momentum>::type::Zero());
             gridForces.Fill(AttributeDefinitions::AttributeInfo<SimulationAttribute::Force>::type::Zero());
        
-            const auto D = (grid.CellSize() * grid.CellSize() * 0.25);
-            core::VectorUtils::ApplyOverElements(particleInertias, [D](auto &particleInertia) {
-              particleInertia = AttributeDefinitions::AttributeInfo<SimulationAttribute::Inertia>::type::Identity() * D;
-            });
+            const T D = (grid.CellSize() * grid.CellSize() * 0.25);
 
             IterateParticleKernel([&](unsigned int p, const auto& offset, const auto& i) {
                 auto* gridMass = gridMasses.at(i);
@@ -407,20 +394,13 @@ namespace MPM {
                 if (gridMass && gridMomentum) {
                     auto weight = particleWeights[p].getWeight(offset);
 
-                    // Update Inertia
-                   auto& particleInertia           = particleInertias[p];
                    const auto& particleAffineState = particleAffineStates[p];
 
                    const auto xixp = gridPosition.matrix() - particlePositions[p];
-       
-
-                   // Update particle velocities
-                  // auto 
-                   //particleVelocities[p] +=;
 
                    // Update grid weights
                    *gridMass     += weight * particleMasses[p];
-                   *gridMomentum += weight * particleMasses[p] * (particleVelocities[p] + particleAffineState * particleInertia.inverse() * xixp);
+                   *gridMomentum += weight * particleMasses[p] * (particleVelocities[p] + particleAffineState * (1/D) * xixp);
                 }
             });
 
