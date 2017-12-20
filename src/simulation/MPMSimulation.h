@@ -6,6 +6,7 @@
 #include "AttributeGrid.h"
 #include "AttributeTransfer.h"
 
+
 namespace simulation {
 namespace MPM {
     // Declare attributes we will use in the simulation
@@ -22,7 +23,10 @@ namespace MPM {
         Momentum,
         AffineState, // The B matrix for APIC Simulation
         mu,
-        lambda
+        lambda,
+	mu_0, // for snow
+	lambda_0, // for snow
+	Jp_snow // for snow
     };
 
     template <typename T, unsigned int Dimension>
@@ -181,6 +185,24 @@ namespace MPM {
             using type = T;
             static type Default() { return {}; }
         };
+
+        template <>
+        struct AttributeDefinitions::AttributeInfo<SimulationAttribute::mu_0> {
+            using type = T;
+            static type Default() { return{}; }
+        };
+
+        template <>
+        struct AttributeDefinitions::AttributeInfo<SimulationAttribute::lambda_0> {
+            using type = T;
+            static type Default() { return{}; }
+        };
+
+        template <>
+        struct AttributeDefinitions::AttributeInfo<SimulationAttribute::Jp_snow> {
+            using type = T;
+            static type Default() { return{}; }
+        };
     };
 
     template <typename T, unsigned int Dimension>
@@ -200,7 +222,10 @@ namespace MPM {
             SimulationAttribute::Stress,
             SimulationAttribute::AffineState,
             SimulationAttribute::mu,
-            SimulationAttribute::lambda
+            SimulationAttribute::lambda,
+            SimulationAttribute::mu_0,
+            SimulationAttribute::lambda_0,
+            SimulationAttribute::Jp_snow
         >;
 
         // Declare the grid attributes
@@ -483,6 +508,8 @@ namespace MPM {
                 stress = 2 * particleMus[p] * (F - R) + particleLambdas[p] * (J - 1) * jFInvTranspose; // corotated
             });
 
+
+
             const auto& particlePositions = particles.Get<SimulationAttribute::Position>();
             const auto& particleVolumes = particles.Get<SimulationAttribute::Volume>();
             const auto& particleWeights = particles.Get<SimulationAttribute::Weights>();
@@ -587,15 +614,91 @@ namespace MPM {
             core::VectorUtils::ApplyOverElements(deformationUpdates, [](auto& deformationUpdate) {
                 deformationUpdate = AttributeDefinitions::AttributeInfo<SimulationAttribute::DeformationUpdate>::type::Zero();
             });
+
             IterateParticleKernel([&](unsigned int p, const auto& offset, const auto& i) {
                 auto* gridVelocity = gridVelocities.at(i);
                 if (gridVelocity) {
                     deformationUpdates[p] += gridVelocities[i] * particleWeights[p].getWeightGradient(offset, grid.CellSize()).transpose();
                 }
             });
-            core::VectorUtils::ApplyOverIndices(particleDeformations, [&](unsigned int p) {
-                particleDeformations[p] += dt * deformationUpdates[p] * particleDeformations[p];
-            });
+
+	    // Update deformation gradient
+        core::VectorUtils::ApplyOverIndices(particleDeformations, [&](unsigned int p) {
+            particleDeformations[p] += dt * deformationUpdates[p] * particleDeformations[p];
+        });
+
+        
+	    // Snow
+        // Apply plasticity for snow
+        const T theta_s = 2e-3;
+        const T theta_c = 7.5e-3;
+        const T min_Jp = 0.1;
+        const T ksi = 10; // hardening parameter
+
+        auto& particleMus = particles.Get<SimulationAttribute::mu>();
+        auto& particleLambdas = particles.Get<SimulationAttribute::lambda>();
+        auto& particleMu_0s = particles.Get<SimulationAttribute::mu_0>();
+        auto& particleLambda_0s = particles.Get<SimulationAttribute::lambda_0>();
+        auto& particleJpSnows = particles.Get<SimulationAttribute::Jp_snow>();
+
+        core::VectorUtils::ApplyOverIndices(particleDeformations, [&](unsigned int p) {
+            auto& F = particleDeformations[p];
+            auto J = F.determinant();
+            Eigen::JacobiSVD<Eigen::Matrix<T, Dimension, Dimension>> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
+            Eigen::Matrix<T, Dimension, Dimension> U = svd.matrixU();
+            Eigen::Matrix<T, Dimension, 1> Sigma = svd.singularValues();
+            Eigen::Matrix<T, Dimension, Dimension> V = svd.matrixV();
+
+            Eigen::Matrix<T, Dimension, 1> temp;
+            for (unsigned int i = 1; i < Sigma.size(); ++i) {
+                for (unsigned int j = i; j > 0 && Sigma(j - 1, 0) < Sigma(j, 0); j--) {
+                    std::swap(Sigma(j, 0), Sigma(j - 1, 0));
+
+                    temp = U.row(j);
+                    U.row(j) = U.row(j - 1);
+                    U.row(j - 1) = temp;
+
+                    temp = V.row(j);
+                    V.row(j) = V.row(j - 1);
+                    V.row(j - 1) = temp;
+                }
+            }
+
+            if (U.determinant() < 0) {
+                U.col(Dimension - 1) *= -1;
+                Sigma(Dimension - 1, 0) *= -1;
+            }
+            if (V.determinant() < 0) {
+                V.col(Dimension - 1) *= -1;
+                Sigma(Dimension - 1, 0) *= -1;
+            }
+
+            assert(U.determinant() > 0);
+            assert(V.determinant() > 0);
+            auto _F = (U * Eigen::DiagonalMatrix<T, Dimension>(Sigma) * V.transpose()).eval();
+            assert(((_F.array() - F.array()) < 1e-4).all());
+            		
+		    // clamp the sigma
+            Eigen::Matrix<T, Dimension, Dimension> SigmaMatrix = Eigen::Matrix<T, Dimension, Dimension>::Zero();
+		    T Je_original = 1; // original determinant of elastic deformation gradient
+		    T Je_new = 1; // new determinant of elastic deformation gradient
+		    for(int d = 0; d < Dimension; ++d) {
+		        Je_original *= Sigma(d);
+		        SigmaMatrix(d, d) = std::min(std::max(Sigma(d), 1 - theta_c), 1 + theta_s); 
+		        Je_new *= SigmaMatrix(d, d);
+		    }
+
+		    F = U * SigmaMatrix * V.transpose();
+
+		    // Update Jp
+		    particleJpSnows[p] = std::max(particleJpSnows[p] * Je_original / Je_new, min_Jp);
+
+		    // Do hardening
+		    T power = ksi * (1 - particleJpSnows[p]);
+		    particleMus[p]= particleMu_0s[p] * std::exp(power);
+		    particleLambdas[p]= particleLambda_0s[p] * std::exp(power);
+        });
+
         }
     };
 }

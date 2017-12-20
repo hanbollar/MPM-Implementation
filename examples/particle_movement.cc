@@ -149,8 +149,9 @@ int main(int argc, char** argv) {
     float cellSize = largestLength / density / std::sqrt(kDimension);
     
     float YoungsModulus = 1500.f; // around 3e1 to 3e3
-    float PoissonRatio = 0.4f; // usually it's arround 0.3 - 0.4
-    float materialDensity = 30.f;
+    float PoissonRatio = 0.3f; // usually it's arround 0.3 - 0.4
+    float materialDensity = 30.f; // 2 for snow
+    // gravity = -1.5 in the y direction
 
     sim.SetBounds(gridOrigin, gridOrigin + gridSize);
     sim.SetCellSize(cellSize);
@@ -165,6 +166,9 @@ int main(int argc, char** argv) {
         particles.Get<simulation::MPM::SimulationAttribute::Mass>()[p] = particleVolume * materialDensity;
         particles.Get<simulation::MPM::SimulationAttribute::mu>()[p] = YoungsModulus / (2 * (1 + PoissonRatio));
         particles.Get<simulation::MPM::SimulationAttribute::lambda>()[p] = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
+        particles.Get<simulation::MPM::SimulationAttribute::mu_0>()[p] = YoungsModulus / (2 * (1 + PoissonRatio));
+        particles.Get<simulation::MPM::SimulationAttribute::lambda_0>()[p] = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
+        particles.Get<simulation::MPM::SimulationAttribute::Jp_snow>()[p] = 1;
     }
 
     sim.AddParticles(particles);
