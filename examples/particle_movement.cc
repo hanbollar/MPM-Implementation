@@ -27,12 +27,12 @@
 using namespace core;
 
 Camera<float> camera;
-constexpr unsigned int kDimension = 3; // 3D simulation
-static constexpr auto simulationTimestep = std::chrono::duration<double, std::milli>(16); // timestep for simulation
+constexpr unsigned int kDimension = 3; // sim dim
+static constexpr auto simulationTimestep = std::chrono::duration<double, std::milli>(16); // timestep for simulatio
 simulation::MPM::MPMSimulation<float, kDimension> sim;
 
 void Loop(display::Viewport::Window* window) {
-    window->Init(1280, 720); // originally 640, 480
+    window->Init(1920, 1080); // originally 640, 480
     CameraControls<float> controls(camera, window->GetGLFWWindow());
     controls.SetCurrent();
 
@@ -132,13 +132,13 @@ int main(int argc, char** argv) {
 
     // Point the camera at the bounding box
     camera.LookAt((boundingBox->max() + boundingBox->min()) / 2.f);
-    camera.SetAspectRatio(1280.f / 720.f);
+    camera.SetAspectRatio(1920.f / 1080.f);
     camera.SetFieldOfView(60.f * static_cast<float>(kPI) / 180.f);
     camera.SetNearFar(0.1f, 2000.f);
     camera.SetDistance(2.5f * largestLength);
     camera.Rotate(-70.f * static_cast<float>(kPI) / 180.f, 0);
 
-    Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 1.5f;
+    Eigen::Array<float, kDimension, 1> gridSize = (boundingBox->max() - boundingBox->min()) * 2.5f;
     Eigen::Array<float, kDimension, 1> gridOrigin = (boundingBox->max() + boundingBox->min()) / 2.f - gridSize / 2.f;
 
     // Generate samples inside the mesh
@@ -161,7 +161,9 @@ int main(int argc, char** argv) {
     particles.Resize(samples.size());
     for (unsigned int p = 0; p < samples.size(); ++p) {
         particles.Get<simulation::MPM::SimulationAttribute::Position>()[p] = samples[p].matrix();
-        particles.Get<simulation::MPM::SimulationAttribute::Position>()[p][1] += (gridSize[1] - boundingBox->Extent(1)) / 2.f - 2.f * cellSize;
+        particles.Get<simulation::MPM::SimulationAttribute::Position>()[p][1] += (gridSize[1] - boundingBox->Extent(1)) / 2.f - 2.f * cellSize - 0.1;
+        particles.Get<simulation::MPM::SimulationAttribute::Position>()[p][0] += 0.55;
+        particles.Get<simulation::MPM::SimulationAttribute::Velocity>()[p][0] = ((particles.Get<simulation::MPM::SimulationAttribute::Position>()[p][0] > 0.0f) ? -1.0f : 1.0f) * 4.0f;
         particles.Get<simulation::MPM::SimulationAttribute::Volume>()[p] = particleVolume;
         particles.Get<simulation::MPM::SimulationAttribute::Mass>()[p] = particleVolume * materialDensity;
         particles.Get<simulation::MPM::SimulationAttribute::mu>()[p] = YoungsModulus / (2 * (1 + PoissonRatio));
@@ -172,6 +174,30 @@ int main(int argc, char** argv) {
     }
 
     sim.AddParticles(particles);
+
+    // second set of particles
+    #define SECOND_OBJECT
+
+    #ifdef SECOND_OBJECT
+
+    simulation::MPM::MPMSimulation<float, kDimension>::ParticleSet particles2;
+    particles2.Resize(samples.size());
+    for (unsigned int p = 0; p < samples.size(); ++p) {
+        particles2.Get<simulation::MPM::SimulationAttribute::Position>()[p] = samples[p].matrix();
+        particles2.Get<simulation::MPM::SimulationAttribute::Position>()[p][1] += (gridSize[1] - boundingBox->Extent(1)) / 2.f - 2.f * cellSize - 0.1;
+        particles2.Get<simulation::MPM::SimulationAttribute::Position>()[p][0] -= 0.55;
+        particles2.Get<simulation::MPM::SimulationAttribute::Velocity>()[p][0] = ((particles2.Get<simulation::MPM::SimulationAttribute::Position>()[p][0] > 0.0f) ? -1.0f : 1.0f) * 0.5f;
+        particles2.Get<simulation::MPM::SimulationAttribute::Volume>()[p] = particleVolume;
+        particles2.Get<simulation::MPM::SimulationAttribute::Mass>()[p] = particleVolume * materialDensity;
+        particles2.Get<simulation::MPM::SimulationAttribute::mu>()[p] = YoungsModulus / (2 * (1 + PoissonRatio));
+        particles2.Get<simulation::MPM::SimulationAttribute::lambda>()[p] = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
+        particles2.Get<simulation::MPM::SimulationAttribute::mu_0>()[p] = YoungsModulus / (2 * (1 + PoissonRatio));
+        particles2.Get<simulation::MPM::SimulationAttribute::lambda_0>()[p] = YoungsModulus * PoissonRatio / ((1 + PoissonRatio) * (1 - 2 * PoissonRatio));
+        particles2.Get<simulation::MPM::SimulationAttribute::Jp_snow>()[p] = 1;
+    }
+    sim.AddParticles(particles2);
+    #endif
+    
     sim.Init();
 
     // Wait in case the viewport has not yet been initialized

@@ -38,8 +38,6 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
     core::MultiGrid<float, N> backgroundGrid(backgroundGridSize);
     backgroundGrid.Fill(-1);
 
-
-
     std::uniform_real_distribution<float> unif01(0, 1);
     std::uniform_real_distribution<SamplePrecision> unif11(-1, 1);
     std::uniform_real_distribution<SamplePrecision> unifR(std::pow(minDistance, N), std::pow(2 * minDistance, N));
@@ -65,6 +63,9 @@ std::vector<Eigen::Array<SamplePrecision, N, 1>> SampleBox(const core::AxisAlign
             sample_t& sample = testSamples[s];
             for (unsigned int n = 0; n < N; ++n) {
                 sample(n, 0) = unif11(rng);
+                /*if (n == 2) { // this makes the sim 2D...pretty much
+                    sample(n, 0) = 0.0;
+                }*/
             }
 
             sample /= sample.matrix().norm();

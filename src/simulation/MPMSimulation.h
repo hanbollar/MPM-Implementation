@@ -324,6 +324,7 @@ namespace MPM {
             grid.Resize(cellSize, gridSize);
 
             auto& gridMasses = grid.GetGrid<SimulationAttribute::Mass>();
+
             // Just get an initial count of number of particles in each cell
             IterateParticleKernel([&](unsigned int p, const auto& offset, const auto& i) {
                 auto* gridMass = gridMasses.at(i);
@@ -556,6 +557,12 @@ namespace MPM {
                         gridVelocities[i][d] = T(0);
                     }
                 }
+
+                // don't use with normal elastic material, only snow
+                /*Eigen::Matrix<T, Dimension, 1> gridCellPosWorld = i.matrix().cast<T>() * grid.CellSize() + gridOrigin.matrix().cast<T>();
+                if (std::abs(gridCellPosWorld[0]) < 0.1 && gridCellPosWorld[1] < -0.6) {
+                    gridVelocities[i][1] = 0.0;
+                }*/
             });
         }
 
@@ -627,6 +634,8 @@ namespace MPM {
             particleDeformations[p] += dt * deformationUpdates[p] * particleDeformations[p];
         });
 
+        //#define SNOW
+        #ifdef SNOW
         
 	    // Snow
         // Apply plasticity for snow
@@ -698,6 +707,7 @@ namespace MPM {
 		    particleMus[p]= particleMu_0s[p] * std::exp(power);
 		    particleLambdas[p]= particleLambda_0s[p] * std::exp(power);
         });
+        #endif
 
         }
     };
