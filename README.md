@@ -1,5 +1,7 @@
 # Project Report
-#### View Project Report [Here](https://github.com/hanbollar/MPM-Implementation/blob/master/ProjectReport.pdf)
+#### Read Project [Report](https://github.com/hanbollar/MPM-Implementation/blob/master/ProjectReport.pdf)
+
+#### Watch Final [Demo](https://www.vimeo.com/hannahbollar/mpm)
 
 # Building
 ```
